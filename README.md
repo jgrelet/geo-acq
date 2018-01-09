@@ -1,4 +1,6 @@
-# Acquisition program for
+# Description
+
+GEO-ACQ is an acquisition program
 
 - GPS
 - Echosounder
