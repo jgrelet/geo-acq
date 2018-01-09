@@ -1,0 +1,21 @@
+[global]
+author         = "jgrelet IRD nov 2017"
+debug          = false
+echo           = true
+log            = "nmea.log"
+
+[acq]
+file           = "nmea.txt"
+
+[gps]
+type           = "nmea"
+use            = true
+device 	       = "COM9"
+baud           = 4800
+
+
+[echosounder]
+use            = false
+type           = "nmea"
+device 	       = "COM16"
+baud           = 4800
