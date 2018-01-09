@@ -1,8 +1,13 @@
 # Binaries for programs and plugins
 *.exe
+nmea-proto-*
 *.dll
 *.so
 *.dylib
+*.txt
+*.json
+*.log
+*.swp
 
 # Test binary, build with `go test -c`
 *.test
