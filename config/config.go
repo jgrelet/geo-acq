@@ -37,11 +37,14 @@ type Config struct {
 	Serials map[string]SerialPort
 }
 
-// GetConfig give the scontent of toml configFile
-func (cfg *Config) GetConfig(configFile string) {
+// New  return a Config struct from the content of toml configFile
+func New(configFile string) Config {
 
+	cfg := Config{}
 	//  read config file
 	if _, err := toml.DecodeFile(configFile, &cfg); err != nil {
 		log.Fatal(fmt.Sprintf("Error func GetConfig: file= %s -> %s\n", configFile, err))
 	}
+	fmt.Println(cfg)
+	return cfg
 }

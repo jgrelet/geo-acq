@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	_ "os"
 
 	"github.com/jgrelet/geo-acq/config"
 	"github.com/jgrelet/geo-acq/devices"
@@ -13,10 +14,11 @@ func main() {
 	// simul.GpsChan = make(chan interface{})
 	// simul.EchoSounderChan = make(chan interface{})
 	devices.SerialGetInfo()
-	var cfg config.Config
-	cfg.GetConfig("windows.toml")
+	//var cfg config.Config
+	//cfg.GetConfig("windows.toml")
 
-	gps := devices.New("gps", cfg)
+	gps := devices.New("gps", config.New("windows.toml"))
+	//os.Exit(1)
 	err := gps.Connect()
 	defer gps.Disconnect()
 	if err != nil {

@@ -34,7 +34,7 @@ type Device struct {
 // New creates a new Device object and connects to the specified serial port.
 func New(name string, args ...interface{}) *Device {
 	var cfg config.Config
-	// Create new Godudev client
+	// Create new device
 	dev := &Device{
 		name: name,
 		port: "",
