@@ -1,4 +1,5 @@
-BINARY = nmea-proto
+GEO-ACQ = geo-acq
+GEO-ACQ-PATH = cmd/${GEO-ACQ}
 VERSION = 0.0.1
 
 # user define
@@ -14,23 +15,26 @@ temp = $(subst /, ,$@)
 os = $(word 1, $(temp))
 arch = $(word 2, $(temp))
 
-all: release copy
+all:
+	cd $(GEO-ACQ-PATH);go build -$(LDFLAGS)
+
+allos: release copy
 
 release: $(PLATFORMS)
 
 $(PLATFORMS):
 ifeq ($(os),linux)	
-	GOOS=$(os) GOARCH=$(arch) go build -o $(BINARY)-'$(os)-$(arch)'.exe -$(LDFLAGS)	
+	cd $(GEO-ACQ-PATH);GOOS=$(os) GOARCH=$(arch) go build -o $(GEO-ACQ)-'$(os)-$(arch)'.exe -$(LDFLAGS)	
 else
-	GOOS=$(os) GOARCH=$(arch) go build -o $(BINARY)-'$(os)-$(arch)' -$(LDFLAGS)
+	cd $(GEO-ACQ-PATH);GOOS=$(os) GOARCH=$(arch) go build -o $(GEO-ACQ)-'$(os)-$(arch)' -$(LDFLAGS)
 endif
 
 copy: 
-	-cp $(BINARY)-* $(DEST)
+	-cp $(GEO-ACQ-PATH)/$(GEO-ACQ)-* $(DEST)
 	-cp *.toml $(DEST)
 	
 clean:
-	-rm -f ${BINARY}-*
-	-rm -f dev.exe
+	-rm -f $(GEO-ACQ-PATH)/$(GEO-ACQ)-*
+	-rm -f $(GEO-ACQ-PATH)/geo-acq.exe
 	
 .PHONY: release $(PLATFORMS) clean

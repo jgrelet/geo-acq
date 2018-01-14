@@ -27,19 +27,5 @@ func main() {
 		}
 		fmt.Println(sentence)
 	}
-	/*
-		// read GPS on serial port or simulation
-		go simul.Gps()
 
-		// main loop
-		for {
-			data := <-simul.GpsChan
-			switch v := data.(type) {
-			case string:
-				fmt.Println(v)
-			case []byte:
-				fmt.Println(v)
-			}
-		}
-	*/
 }
