@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	"bitbucket.org/jgrelet/go/go-testings/channels/acq-dev/devices"
-	_ "bitbucket.org/jgrelet/go/go-testings/channels/acq-dev/simul"
+	"github.com/jgrelet/geo-acq/config"
+	"github.com/jgrelet/geo-acq/devices"
 )
 
 // main entry
@@ -13,8 +13,10 @@ func main() {
 	// simul.GpsChan = make(chan interface{})
 	// simul.EchoSounderChan = make(chan interface{})
 	devices.SerialGetInfo()
-	// ttyytt
-	gps := devices.New("myGPS", "COM9")
+	var cfg config.Config
+	cfg.GetConfig("windows.toml")
+
+	gps := devices.New("gps", cfg)
 	err := gps.Connect()
 	defer gps.Disconnect()
 	if err != nil {

@@ -7,7 +7,8 @@ import (
 	"os"
 
 	//"github.com/tarm/serial"
-	"bitbucket.org/jgrelet/go/go-testings/channels/acq-dev/util"
+	"github.com/jgrelet/geo-acq/config"
+	"github.com/jgrelet/geo-acq/util"
 	"go.bug.st/serial.v1"
 )
 
@@ -32,6 +33,7 @@ type Device struct {
 
 // New creates a new Device object and connects to the specified serial port.
 func New(name string, args ...interface{}) *Device {
+	var cfg config.Config
 	// Create new Godudev client
 	dev := &Device{
 		name: name,
@@ -39,8 +41,8 @@ func New(name string, args ...interface{}) *Device {
 		conn: nil,
 		openSP: func(port string) (io.ReadWriteCloser, error) {
 			p, err := serial.Open(port, &serial.Mode{
-				BaudRate: 4800,
-				DataBits: 8,
+				BaudRate: cfg.Serials[name].Baud,
+				DataBits: cfg.Serials[name].Databit,
 				Parity:   serial.NoParity,
 				StopBits: serial.OneStopBit,
 			})
@@ -56,8 +58,9 @@ func New(name string, args ...interface{}) *Device {
 	// Parse variadic args
 	for _, arg := range args {
 		switch arg.(type) {
-		case string:
-			dev.port = arg.(string)
+		case config.Config:
+			cfg = arg.(config.Config)
+			dev.port = cfg.Serials[dev.name].Port
 		case io.ReadWriteCloser:
 			dev.conn = arg.(io.ReadWriteCloser)
 		case bool:

@@ -1,21 +1,47 @@
 [global]
-author         = "jgrelet IRD nov 2017"
+author         = "jgrelet IRD jan 2018"
 debug          = false
 echo           = true
-log            = "nmea.log"
+log            = "geo-acq.log"
 
 [acq]
-file           = "nmea.txt"
+file           = "geo-acq.txt"
 
-[gps]
-type           = "nmea"
-use            = true
-device 	       = "COM9"
-baud           = 4800
+[devices]
+
+	[devices.gps]
+	type           = "nmea"
+	use            = true
+	device         = "serial"
+
+	[devices.echosounder]
+	type           = "nmea"
+	use            = false
+	device         = "serial"
+
+[serials]
+
+	[serials.gps]
+	port 	       = "COM9"
+	baud           = 4800
+	parity	       = "none"
+	databit        = 8
+	stopbit        = 1
+
+	[serials.echosounder]
+	port 	       = "COM16"
+	baud           = 4800
+	parity	       = "none"
+	databit        = 8
+	stopbit        = 1
+
+[ethernets]
+
+	[ethernets.gps]
+	port           = 10183
+
+	[ethernets.echosounder]
+	port           = 10184
 
 
-[echosounder]
-use            = false
-type           = "nmea"
-device 	       = "COM16"
-baud           = 4800
+
