@@ -72,6 +72,10 @@ func New(name string, args ...interface{}) *Device {
 
 // Connect starts a connection to the firmata board.
 func (dev *Device) Connect() error {
+
+	// enumerate avalaible serial port
+	SerialGetInfo()
+
 	if dev.conn == nil {
 		// Try to connect to serial port
 		sp, err := dev.openSP(dev.Port())
@@ -105,14 +109,14 @@ func (dev *Device) Read() (response string, err error) {
 	var stringbuff string
 	var state int
 	var endOfSentence bool
-
-	defer func() {
-		if e := recover(); e != nil {
-			fmt.Println(fmt.Errorf("serial port %T is disconnected -> %s, please check RS232 or USB connection",
-				dev.Port(), err))
-		}
-	}()
-
+	/*
+		defer func() {
+			if e := recover(); e != nil {
+				fmt.Println(fmt.Errorf("serial port %T is disconnected -> %s, please check RS232 or USB connection",
+					dev.Port(), err))
+			}
+		}()
+	*/
 	for {
 		n, err = dev.conn.Read(buff)
 		if err != nil {
