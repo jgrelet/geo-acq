@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 
-	//"github.com/tarm/serial"
 	"github.com/jgrelet/geo-acq/config"
 	"github.com/jgrelet/geo-acq/util"
 	"go.bug.st/serial.v1"
@@ -109,19 +108,16 @@ func (dev *Device) Read() (response string, err error) {
 	var stringbuff string
 	var state int
 	var endOfSentence bool
-	/*
-		defer func() {
-			if e := recover(); e != nil {
-				fmt.Println(fmt.Errorf("serial port %T is disconnected -> %s, please check RS232 or USB connection",
-					dev.Port(), err))
-			}
-		}()
-	*/
+	defer func() {
+		if e := recover(); e != nil {
+			fmt.Println(fmt.Errorf("serial port %s is disconnected -> %s, please check device connection",
+				dev.Port(), err))
+		}
+	}()
 	for {
 		n, err = dev.conn.Read(buff)
 		if err != nil {
-			fmt.Println(err)
-			log.Panic(err)
+			log.Panic("Log panic here !")
 			break
 		}
 		if n == 0 {
