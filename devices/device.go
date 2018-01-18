@@ -28,6 +28,7 @@ type Device struct {
 	simul   bool
 	logger  *log.Logger
 	verbose bool
+	Data    chan string
 }
 
 // New creates a new Device object and connects to the specified serial port.
@@ -52,6 +53,7 @@ func New(name string, args ...interface{}) *Device {
 		},
 		logger:  log.New(os.Stdout, fmt.Sprintf("[%s] ", name), log.Ltime),
 		verbose: true,
+		Data:    make(chan string),
 	}
 
 	// Parse variadic args
@@ -62,8 +64,8 @@ func New(name string, args ...interface{}) *Device {
 			dev.port = cfg.Serials[dev.name].Port
 		case io.ReadWriteCloser:
 			dev.conn = arg.(io.ReadWriteCloser)
-		case bool:
-			//dev.conn = make(chan interface{})
+			//case chan:
+			//	dev.data = make(chan interface{})
 		}
 	}
 	return dev
@@ -84,8 +86,16 @@ func (dev *Device) Connect() error {
 		// Serial connection was successful
 		dev.conn = sp
 	}
-	// Firmata connection
-	//return dev.board.Connect(dev.conn)
+	go func() {
+		for {
+			sentence, err := dev.Read()
+			if err != nil {
+				close(dev.Data)
+				break
+			}
+			dev.Data <- sentence
+		}
+	}()
 	return nil
 }
 
@@ -110,7 +120,7 @@ func (dev *Device) Read() (response string, err error) {
 	var endOfSentence bool
 	defer func() {
 		if e := recover(); e != nil {
-			fmt.Println(fmt.Errorf("serial port %s is disconnected -> %s, please check device connection",
+			fmt.Println(fmt.Errorf("serial port %s is disconnected -> %s Please check device connection",
 				dev.Port(), err))
 		}
 	}()

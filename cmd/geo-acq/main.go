@@ -19,13 +19,12 @@ func main() {
 		log.Fatal(err)
 	}
 	defer gps.Disconnect()
-	for {
-		sentence, err := gps.Read()
-		if err != nil {
-			fmt.Println("Timeout")
-			break
-		}
-		fmt.Println(sentence)
-	}
 
+	// main loop
+	for {
+		select {
+		case msg := <-gps.Data:
+			fmt.Println(msg)
+		}
+	}
 }

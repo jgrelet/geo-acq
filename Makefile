@@ -29,6 +29,9 @@ else
 	cd $(GEO-ACQ-PATH);GOOS=$(os) GOARCH=$(arch) go build -o $(GEO-ACQ)-'$(os)-$(arch)' -$(LDFLAGS)
 endif
 
+run:
+	$(GEO-ACQ-PATH)/$(GEO-ACQ)
+
 copy: 
 	-cp $(GEO-ACQ-PATH)/$(GEO-ACQ)-* $(DEST)
 	-cp *.toml $(DEST)
