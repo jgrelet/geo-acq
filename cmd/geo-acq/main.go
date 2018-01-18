@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/jgrelet/geo-acq/config"
 	"github.com/jgrelet/geo-acq/devices"
@@ -23,8 +24,13 @@ func main() {
 	// main loop
 	for {
 		select {
-		case msg := <-gps.Data:
-			fmt.Println(msg)
+		case msg, ok := <-gps.Data:
+			if ok {
+				fmt.Println(msg)
+			} else {
+				fmt.Println("Exit ...")
+				os.Exit(0)
+			}
 		}
 	}
 }
