@@ -5,44 +5,45 @@ import (
 	"math"
 	"time"
 
-	"bitbucket.org/jgrelet/go/go-testings/channels/acq-dev/util"
+	"github.com/jgrelet/geo-acq/util"
+
 	nmea "github.com/jgrelet/go-nmea"
 )
 
-// GpsChan
-var (
-	GpsChan chan interface{}
-)
-
-// Gps simulate GPS every second
-func Gps() {
-	tickChan := time.NewTicker(time.Second * 1).C
-
+// NewGps simulate GPS NME183 GGA sentence every second
+// use a channel
+func NewGps(interval time.Duration, sog, cog float64) <-chan string {
+	out := make(chan string)
+	tick := time.NewTicker(time.Second * interval).C
 	// initialize GGA sentence
-	//gga := nmea.Message{}
-	//gga.Type = nmea.TypeIDs["GPGGA"]
-	//msg := "000005.200,0843.74714,S,03446.48123,W,1,14,00.7,000.000,M,0.0,M,0.0,0000"
+	// gga := nmea.Message{}
+	// gga.Type = nmea.TypeIDs["GPGGA"]
+	// msg := "000005.200,0843.74714,S,03446.48123,W,1,14,00.7,000.000,M,0.0,M,0.0,0000"
 	// gga.Fields = strings.Split(msg, nmea.FieldDelimiter)
-	//msg, err := nmea.Parse("$GPGGA,015540.000,0001.0,N,02300.0,W,1,17,0.6,0051.6,M,0.0,M,,*79")
-	msg, err := nmea.Parse("$GPGGA,015540.000,0001.0,N,02300.0,E,1,17,0.6,0051.6,M,0.0,M,,*5b")
+	// msg, err := nmea.Parse("$GPGGA,015540.000,0001.0,N,02300.0,W,1,17,0.6,0051.6,M,0.0,M,,*79")
+	sentence, err := nmea.Parse("$GPGGA,015540.000,0001.0,N,02300.0,E,1,17,0.6,0051.6,M,0.0,M,,*5b")
 	if err != nil {
 		fmt.Println("Unable to decode nmea message, err:", err.Error())
 	}
-	gpgga := msg.(*nmea.GPGGA)
-	speed, heading := 10., 90. // 10 miles and 90 degrees
 
-	for {
-		select {
-		case <-tickChan:
-			gpgga.TimeUTC = time.Now()
-			lat, lon := computeNextPosition(float64(gpgga.Latitude), float64(gpgga.Longitude), speed, heading)
-			gpgga.Latitude = nmea.LatLong(lat)
-			gpgga.Longitude = nmea.LatLong(lon)
-			//f("Lat: %f Lon: %f\n", gpgga.Latitude, gpgga.Longitude)
-			//f("sentence:%s\n", gpgga.Serialize())
-			GpsChan <- gpgga.Serialize()
+	// initialize GPGGA struc from sentence
+	gpgga := sentence.(*nmea.GPGGA)
+
+	// go routine
+	go func() { // infinite lopp
+		for {
+			select {
+			case <-tick:
+				gpgga.TimeUTC = time.Now()
+				latitude, longitude := computeNextPosition(float64(gpgga.Latitude),
+					float64(gpgga.Longitude), sog, cog)
+				gpgga.Latitude = nmea.LatLong(latitude)
+				gpgga.Longitude = nmea.LatLong(longitude)
+				out <- gpgga.Serialize()
+			}
 		}
-	}
+	}()
+	return out
 }
 
 // computeNextPosition calculate next position with speed and heading

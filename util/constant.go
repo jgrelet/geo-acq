@@ -7,9 +7,11 @@ import (
 	nmea "github.com/jgrelet/go-nmea"
 )
 
-// usefull shortcut macros
-var p = fmt.Println
-var f = fmt.Printf
+// P is usefull shortcut macros
+var P = fmt.Println
+
+// F is usefull shortcut macros
+var F = fmt.Printf
 
 var badLatLong = nmea.LatLong(1e+36)
 
