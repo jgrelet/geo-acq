@@ -7,6 +7,7 @@ import (
 	"github.com/jgrelet/geo-acq/config"
 	"github.com/jgrelet/geo-acq/devices"
 	"github.com/jgrelet/geo-acq/simul"
+	"github.com/jgrelet/geo-acq/util"
 )
 
 // main entry
@@ -17,8 +18,10 @@ func main() {
 		log.Fatal(err)
 	}
 	defer gps.Disconnect()
-	nmea := simul.NewGps(2, 10, 90)
+	nmea := simul.NewGps(1, 10, 90)
 	for {
-		fmt.Println(<-nmea)
+		sentence := <-nmea
+		fmt.Println("Send: " + sentence)
+		gps.Write(sentence + util.CR + util.LF)
 	}
 }

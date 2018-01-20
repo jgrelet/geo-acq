@@ -111,6 +111,12 @@ func (dev *Device) Port() string { return dev.port }
 // Name returns the  FirmataAdaptors name
 func (dev *Device) Name() string { return dev.name }
 
+// Write over serial port
+func (dev *Device) Write(sentence string) (err error) {
+	_, err = dev.conn.Write([]byte(sentence))
+	return err
+}
+
 // Read over serial port
 func (dev *Device) Read() (response string, err error) {
 	var n int

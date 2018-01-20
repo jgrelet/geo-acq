@@ -29,8 +29,11 @@ else
 	cd $(GEO-ACQ-PATH);GOOS=$(os) GOARCH=$(arch) go build -o $(GEO-ACQ)-'$(os)-$(arch)' -$(LDFLAGS)
 endif
 
+simulgps:
+	cd cmd/simul/gps;go build
+
 run:
-	$(GEO-ACQ-PATH)/$(GEO-ACQ)
+	-$(GEO-ACQ-PATH)/$(GEO-ACQ)
 
 copy: 
 	-cp $(GEO-ACQ-PATH)/$(GEO-ACQ)-* $(DEST)
@@ -40,4 +43,4 @@ clean:
 	-rm -f $(GEO-ACQ-PATH)/$(GEO-ACQ)-*
 	-rm -f $(GEO-ACQ-PATH)/geo-acq.exe
 	
-.PHONY: release $(PLATFORMS) clean
+.PHONY: release $(PLATFORMS) clean run allos simulgps
