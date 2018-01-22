@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"os"
 
 	"github.com/jgrelet/geo-acq/config"
@@ -17,18 +18,21 @@ type Devices interface {
 	Connect(io.ReadWriteCloser) error
 	Disconnect() error
 	Read()
+	Write()
 }
 
 // Device represents instrument.
 type Device struct {
-	name    string
-	port    string
-	conn    io.ReadWriteCloser
-	openSP  func(port string) (io.ReadWriteCloser, error)
-	simul   bool
-	logger  *log.Logger
-	verbose bool
-	Data    chan string
+	name     string
+	port     string
+	typePort string
+	conn     io.ReadWriteCloser
+	openSP   func(port string) (io.ReadWriteCloser, error)
+	openEth  func(port string) (io.ReadWriteCloser, error)
+	simul    bool
+	logger   *log.Logger
+	verbose  bool
+	Data     chan string
 }
 
 // New creates a new Device object and connects to the specified serial port.
@@ -51,6 +55,20 @@ func New(name string, args ...interface{}) *Device {
 			}
 			return p, err
 		},
+		openEth: func(port string) (io.ReadWriteCloser, error) {
+			saddr, err := net.ResolveUDPAddr("udp", cfg.UDP[name].Port)
+			if err != nil {
+				err = fmt.Errorf("Can't open ethernet port %s -> %s", port, err)
+			}
+
+			/* Now listen at selected port */
+			scon, err := net.ListenUDP("udp", saddr)
+			if err != nil {
+				err = fmt.Errorf("Can't open ethernet port %s -> %s", port, err)
+			}
+			defer scon.Close()
+			return scon, err
+		},
 		logger:  log.New(os.Stdout, fmt.Sprintf("[%s] ", name), log.Ltime),
 		verbose: true,
 		Data:    make(chan string),
@@ -61,30 +79,49 @@ func New(name string, args ...interface{}) *Device {
 		switch arg.(type) {
 		case config.Config:
 			cfg = arg.(config.Config)
-			dev.port = cfg.Serials[dev.name].Port
+			// dev.name is gps, echo-sounder or radar
+			dev.typePort = cfg.Devices[dev.name].Device
+			switch dev.typePort {
+			case "serial":
+				dev.port = cfg.Serials[dev.name].Port
+			case "udp":
+				dev.port = cfg.UDP[dev.name].Port
+			}
 		case io.ReadWriteCloser:
 			dev.conn = arg.(io.ReadWriteCloser)
 			//case chan:
 			//	dev.data = make(chan interface{})
 		}
 	}
+	fmt.Println("Port:", dev.port)
 	return dev
 }
 
 // Connect starts a connection to the firmata board.
 func (dev *Device) Connect() error {
 
-	// enumerate avalaible serial port
-	SerialGetInfo()
-
-	if dev.conn == nil {
-		// Try to connect to serial port
-		sp, err := dev.openSP(dev.Port())
+	// serial or ethernet
+	switch dev.typePort {
+	case "serial":
+		if dev.conn == nil {
+			// enumerate avalaible serial port
+			SerialGetInfo()
+			// Try to connect to serial port
+			sp, err := dev.openSP(dev.Port())
+			if err != nil {
+				return err
+			}
+			// Serial connection was successful
+			dev.conn = sp
+		}
+	case "udp":
+		fmt.Println("ethernet....")
+		eth, err := dev.openEth(dev.Port())
 		if err != nil {
 			return err
 		}
 		// Serial connection was successful
-		dev.conn = sp
+		dev.conn = eth
 	}
 	go func() {
 		for {

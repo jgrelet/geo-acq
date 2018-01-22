@@ -12,12 +12,12 @@ file           = "geo-acq.txt"
 	[devices.gps]
 	type           = "nmea"
 	use            = true
-	device         = "serial"
+	device         = "udp"
 
 	[devices.echosounder]
 	type           = "nmea"
 	use            = false
-	device         = "serial"
+	device         = "udp"
 
 [serials]
 
@@ -35,13 +35,13 @@ file           = "geo-acq.txt"
 	databit        = 8
 	stopbit        = 1
 
-[ethernets]
+[udp]
 
-	[ethernets.gps]
-	port           = 10183
+	[udp.gps]
+	port           = "10183"
 
-	[ethernets.echosounder]
-	port           = 10184
+	[udp.echosounder]
+	port           = "10184"
 
 
 

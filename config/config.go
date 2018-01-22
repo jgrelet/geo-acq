@@ -16,6 +16,12 @@ type SerialPort struct {
 	Parity  string
 }
 
+// UDP struct for ethernet port
+type UDP struct {
+	Port string
+}
+
+// Device struct type = NMEA, Device serial or UDPs
 type Device struct {
 	Type   string
 	Use    bool
@@ -35,6 +41,7 @@ type Config struct {
 	}
 	Devices map[string]Device
 	Serials map[string]SerialPort
+	UDP     map[string]UDP
 }
 
 // New  return a Config struct from the content of toml configFile
@@ -45,6 +52,6 @@ func New(configFile string) Config {
 	if _, err := toml.DecodeFile(configFile, &cfg); err != nil {
 		log.Fatal(fmt.Sprintf("Error func GetConfig: file= %s -> %s\n", configFile, err))
 	}
-	fmt.Println(cfg)
+	fmt.Printf("%v\n", cfg)
 	return cfg
 }
