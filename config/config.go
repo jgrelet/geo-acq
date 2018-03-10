@@ -31,10 +31,11 @@ type Device struct {
 // Config is the Go representation of toml file
 type Config struct {
 	Global struct {
-		Author string
-		Debug  bool
-		Echo   bool
-		Log    string
+		Mission string
+		Author  string
+		Debug   bool
+		Echo    bool
+		Log     string
 	}
 	Acq struct {
 		File string
@@ -52,6 +53,6 @@ func New(configFile string) Config {
 	if _, err := toml.DecodeFile(configFile, &cfg); err != nil {
 		log.Fatal(fmt.Sprintf("Error func GetConfig: file= %s -> %s\n", configFile, err))
 	}
-	fmt.Printf("%v\n", cfg)
+	//fmt.Printf("%v\n", cfg)
 	return cfg
 }

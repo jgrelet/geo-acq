@@ -163,7 +163,7 @@ func (dev *Device) Read() (response string, err error) {
 	var endOfSentence bool
 	defer func() {
 		if e := recover(); e != nil {
-			fmt.Println(fmt.Errorf("serial port %s is disconnected -> %s Please check device connection",
+			fmt.Println(fmt.Errorf("Port %s is disconnected -> %s Please check device connection",
 				dev.Port(), err))
 		}
 	}()

@@ -1,4 +1,5 @@
 [global]
+mission        = "test"
 author         = "jgrelet IRD jan 2018"
 debug          = false
 echo           = true
@@ -12,17 +13,17 @@ file           = "geo-acq.txt"
 	[devices.gps]
 	type           = "nmea"
 	use            = true
-	device         = "udp"
+	device         = "serial"
 
 	[devices.echosounder]
 	type           = "nmea"
 	use            = false
-	device         = "udp"
+	device         = "serial"
 
 [serials]
 
 	[serials.gps]
-	port 	       = "COM20"
+	port 	       = "COM9"
 	baud           = 4800
 	parity	       = "none"
 	databit        = 8
