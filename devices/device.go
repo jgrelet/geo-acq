@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"os"
 
 	"github.com/jgrelet/geo-acq/config"
@@ -28,7 +27,6 @@ type Device struct {
 	typePort string
 	conn     io.ReadWriteCloser
 	openSP   func(port string) (io.ReadWriteCloser, error)
-	openEth  func(port string) (io.ReadWriteCloser, error)
 	simul    bool
 	logger   *log.Logger
 	verbose  bool
@@ -55,20 +53,6 @@ func New(name string, args ...interface{}) *Device {
 			}
 			return p, err
 		},
-		openEth: func(port string) (io.ReadWriteCloser, error) {
-			saddr, err := net.ResolveUDPAddr("udp", cfg.UDP[name].Port)
-			if err != nil {
-				err = fmt.Errorf("Can't open ethernet port %s -> %s", port, err)
-			}
-
-			/* Now listen at selected port */
-			scon, err := net.ListenUDP("udp", saddr)
-			if err != nil {
-				err = fmt.Errorf("Can't open ethernet port %s -> %s", port, err)
-			}
-			defer scon.Close()
-			return scon, err
-		},
 		logger:  log.New(os.Stdout, fmt.Sprintf("[%s] ", name), log.Ltime),
 		verbose: true,
 		Data:    make(chan string),
@@ -84,8 +68,6 @@ func New(name string, args ...interface{}) *Device {
 			switch dev.typePort {
 			case "serial":
 				dev.port = cfg.Serials[dev.name].Port
-			case "udp":
-				dev.port = cfg.UDP[dev.name].Port
 			}
 		case io.ReadWriteCloser:
 			dev.conn = arg.(io.ReadWriteCloser)
@@ -114,14 +96,6 @@ func (dev *Device) Connect() error {
 			// Serial connection was successful
 			dev.conn = sp
 		}
-	case "udp":
-		fmt.Println("ethernet....")
-		eth, err := dev.openEth(dev.Port())
-		if err != nil {
-			return err
-		}
-		// Serial connection was successful
-		dev.conn = eth
 	}
 	go func() {
 		for {
