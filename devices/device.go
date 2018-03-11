@@ -104,6 +104,7 @@ func (dev *Device) Connect() error {
 				close(dev.Data)
 				break
 			}
+			// send sentence to channel Data
 			dev.Data <- sentence
 		}
 	}()
@@ -128,7 +129,7 @@ func (dev *Device) Write(sentence string) (err error) {
 	return err
 }
 
-// Read over serial port
+// Read on serial port
 func (dev *Device) Read() (response string, err error) {
 	var n int
 	buff := make([]byte, 80)

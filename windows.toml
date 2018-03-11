@@ -23,7 +23,7 @@ file           = "geo-acq.txt"
 [serials]
 
 	[serials.gps]
-	port 	       = "COM9"
+	port 	       = "COM21"
 	baud           = 4800
 	parity	       = "none"
 	databit        = 8
