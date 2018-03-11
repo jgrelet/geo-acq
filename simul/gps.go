@@ -10,8 +10,8 @@ import (
 	nmea "github.com/jgrelet/go-nmea"
 )
 
-// NewGps simulate GPS NME183 GGA sentence every second
-// use a channel
+// NewGps simulate GPS NME183 GGA sentence every second, update possition from sog and cog
+// return a channel
 func NewGps(interval time.Duration, sog, cog float64) <-chan string {
 	out := make(chan string)
 	tick := time.NewTicker(time.Second * interval).C
@@ -21,16 +21,20 @@ func NewGps(interval time.Duration, sog, cog float64) <-chan string {
 	// msg := "000005.200,0843.74714,S,03446.48123,W,1,14,00.7,000.000,M,0.0,M,0.0,0000"
 	// gga.Fields = strings.Split(msg, nmea.FieldDelimiter)
 	// msg, err := nmea.Parse("$GPGGA,015540.000,0001.0,N,02300.0,W,1,17,0.6,0051.6,M,0.0,M,,*79")
-	sentence, err := nmea.Parse("$GPGGA,015540.000,0001.0,N,02300.0,E,1,17,0.6,0051.6,M,0.0,M,,*5b")
+	sentenceGGA, err := nmea.Parse("$GPGGA,015540.000,0001.0,N,02300.0,E,1,17,0.6,0051.6,M,0.0,M,,*5b")
 	if err != nil {
 		fmt.Println("Unable to decode nmea message, err:", err.Error())
 	}
-
-	// initialize GPGGA struc from sentence
-	gpgga := sentence.(*nmea.GPGGA)
+	sentenceVTG, err := nmea.Parse("$GPVTG,0.0,T,,M,0.0,N,0.1,K,A*0C")
+	if err != nil {
+		fmt.Println("Unable to decode nmea message, err:", err.Error())
+	}
+	// initialize NMEA struc from sentence
+	gpgga := sentenceGGA.(*nmea.GPGGA)
+	gpvtg := sentenceVTG.(*nmea.GPVTG)
 
 	// go routine
-	go func() { // infinite lopp
+	go func() { // infinite loop
 		for {
 			select {
 			case <-tick:
@@ -40,6 +44,10 @@ func NewGps(interval time.Duration, sog, cog float64) <-chan string {
 				gpgga.Latitude = nmea.LatLong(latitude)
 				gpgga.Longitude = nmea.LatLong(longitude)
 				out <- gpgga.Serialize()
+				gpvtg.SpeedKnots = sog
+				gpvtg.SpeedKmh = gpvtg.SpeedKnots * util.MileToKm
+				gpvtg.COG = cog
+				out <- gpvtg.Serialize()
 			}
 		}
 	}()
