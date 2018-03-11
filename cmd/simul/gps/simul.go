@@ -18,6 +18,8 @@ func main() {
 		log.Fatal(err)
 	}
 	defer gps.Disconnect()
+
+	// new GPS task every second, with SOG=10knt and COG=90°
 	nmea := simul.NewGps(1, 10, 90)
 	for {
 		sentence := <-nmea
