@@ -1,4 +1,4 @@
-# Description
+## Description
 
 GEO-ACQ is an acquisition program
 
@@ -7,6 +7,30 @@ GEO-ACQ is an acquisition program
 - OTT Radar
 
 running on a Raspberry Pi
+
+## Windows prerequisites  
+
+Install MinGW with Msys. If you use Visual Studio Code, configure the terminal shell with msys. See: https://code.visualstudio.com/docs/editor/integrated-terminal#_configuration
+
+Add the following line to your user/setting.json file:
+
+  "terminal.integrated.shell.windows": "C:\\MinGW\\msys\\1.0\\bin\\bash.exe",
+
+You must define Windows env variables :
+
+GOBIN=%USERPROFILE%\go\bin 
+
+and 
+
+GOPATH=%USERPROFILE%\go
+
+and add the C:\MinGW\msys\1.0\bin directory to your Windows path.
+
+Test inside terminal:
+
+> make --version
+GNU Make 3.81
+
 
 ## Development
 
