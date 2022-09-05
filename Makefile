@@ -42,5 +42,6 @@ copy:
 clean:
 	-rm -f $(GEO-ACQ-PATH)/$(GEO-ACQ)-*
 	-rm -f $(GEO-ACQ-PATH)/geo-acq.exe
+	-rm -f cmd/simul/gps/*.exe
 	
-.PHONY: release $(PLATFORMS) clean run allos simulgps
+.PHONY:  clean run allos simulgps
