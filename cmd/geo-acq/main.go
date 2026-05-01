@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -11,17 +12,20 @@ import (
 
 // main entry
 func main() {
+	configPath := flag.String("config", config.DefaultFile(), "configuration TOML file")
+	flag.Parse()
 
-	// simul.GpsChan = make(chan interface{})
-	// simul.EchoSounderChan = make(chan interface{})
+	cfg, err := config.Load(*configPath)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	gps := devices.New("gps", config.New("windows.toml"))
+	gps := devices.New("gps", cfg)
 	if err := gps.Connect(); err != nil {
 		log.Fatal(err)
 	}
 	defer gps.Disconnect()
 
-	// main loop
 	for {
 		select {
 		case msg, ok := <-gps.Data:

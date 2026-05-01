@@ -10,62 +10,86 @@ import (
 	nmea "github.com/jgrelet/go-nmea"
 )
 
-// NewGps simulate GPS NME183 GGA sentence every second, update possition from sog and cog
-// return a channel
+const earthRadiusMeters = 6371000.0
+
+// NewGps simulates GGA and VTG sentences every interval.
 func NewGps(interval time.Duration, sog, cog float64) <-chan string {
 	out := make(chan string)
-	tick := time.NewTicker(time.Second * interval).C
-	// initialize GGA sentence
-	// gga := nmea.Message{}
-	// gga.Type = nmea.TypeIDs["GPGGA"]
-	// msg := "000005.200,0843.74714,S,03446.48123,W,1,14,00.7,000.000,M,0.0,M,0.0,0000"
-	// gga.Fields = strings.Split(msg, nmea.FieldDelimiter)
-	// msg, err := nmea.Parse("$GPGGA,015540.000,0001.0,N,02300.0,W,1,17,0.6,0051.6,M,0.0,M,,*79")
-	sentenceGGA, err := nmea.Parse("$GPGGA,015540.000,0001.0,N,02300.0,E,1,17,0.6,0051.6,M,0.0,M,,*5b")
+	ticker := time.NewTicker(time.Second * interval)
+
+	sentenceGGA, err := nmea.Parse("$GPGGA,015540.000,4807.038,N,01131.000,E,1,17,0.6,51.6,M,0.0,M,,*59")
 	if err != nil {
-		fmt.Println("Unable to decode nmea message, err:", err.Error())
+		panic(fmt.Sprintf("unable to decode gga sentence: %v", err))
 	}
-	sentenceVTG, err := nmea.Parse("$GPVTG,0.0,T,,M,0.0,N,0.1,K,A*0C")
+	sentenceVTG, err := nmea.Parse("$GPVTG,0.0,T,,M,0.0,N,0.0,K,A*0D")
 	if err != nil {
-		fmt.Println("Unable to decode nmea message, err:", err.Error())
+		panic(fmt.Sprintf("unable to decode vtg sentence: %v", err))
 	}
-	// initialize NMEA struc from sentence
+
 	gpgga := sentenceGGA.(*nmea.GPGGA)
 	gpvtg := sentenceVTG.(*nmea.GPVTG)
 
-	// go routine
-	go func() { // infinite loop
-		for {
-			select {
-			case <-tick:
-				gpgga.TimeUTC = time.Now()
-				latitude, longitude := computeNextPosition(float64(gpgga.Latitude),
-					float64(gpgga.Longitude), sog, cog)
-				gpgga.Latitude = nmea.LatLong(latitude)
-				gpgga.Longitude = nmea.LatLong(longitude)
-				out <- gpgga.Serialize()
-				gpvtg.SpeedKnots = sog
-				gpvtg.SpeedKmh = gpvtg.SpeedKnots * util.MileToKm
-				gpvtg.COG = cog
-				out <- gpvtg.Serialize()
-			}
+	go func() {
+		defer ticker.Stop()
+		for range ticker.C {
+			gpgga.TimeUTC = time.Now().UTC()
+			latitude, longitude := computeNextPosition(
+				float64(gpgga.Latitude),
+				float64(gpgga.Longitude),
+				distanceMeters(sog, interval),
+				cog,
+			)
+			gpgga.Latitude = nmea.LatLong(latitude)
+			gpgga.Longitude = nmea.LatLong(longitude)
+			out <- gpgga.Serialize()
+
+			gpvtg.COG = normalizeHeading(cog)
+			gpvtg.SpeedKnots = sog
+			gpvtg.SpeedKmh = sog * util.MileToKm
+			out <- gpvtg.Serialize()
 		}
 	}()
+
 	return out
 }
 
-// computeNextPosition calculate next position with speed and heading
-// see: http://www.movable-type.co.uk/scripts/latlong.html
-// Destination point given distance and bearing from start point
-func computeNextPosition(lat, lon, speed, heading float64) (newLat, newLon float64) {
-	r := 6371. * 1000. // Earth Radius in m
-	distance := speed * util.KmToMile
-	k := distance / r
-	//fmt.Printf("Lat: %f, Lon: %f, Speed: %4.1f, Heading: %5.1f\n", lat, lon, distance, heading)
-	newLat = math.Asin(math.Sin(lat)*math.Cos(k) +
-		math.Cos(lat)*math.Sin(k)*math.Cos(heading))
-	newLon = lon + math.Atan2(math.Sin(heading)*math.Sin(k)*math.Cos(lat),
-		math.Cos(k)-math.Sin(lat)*math.Sin(newLat))
-	//fmt.Printf("newLat: %f, newLon: %f, Speed (km) %4.1f, Heading: %5.1f (rad)\n", newLat, newLon, speed, heading)
-	return
+func distanceMeters(speedKnots float64, interval time.Duration) float64 {
+	hours := (time.Second * interval).Hours()
+	nauticalMiles := speedKnots * hours
+	return nauticalMiles * 1852.0
+}
+
+// computeNextPosition calculates next position from decimal degrees, distance in meters and heading in degrees.
+func computeNextPosition(latDeg, lonDeg, distanceMeters, headingDeg float64) (newLatDeg, newLonDeg float64) {
+	latRad := latDeg * math.Pi / 180.0
+	lonRad := lonDeg * math.Pi / 180.0
+	headingRad := normalizeHeading(headingDeg) * math.Pi / 180.0
+	angularDistance := distanceMeters / earthRadiusMeters
+
+	newLatRad := math.Asin(math.Sin(latRad)*math.Cos(angularDistance) +
+		math.Cos(latRad)*math.Sin(angularDistance)*math.Cos(headingRad))
+	newLonRad := lonRad + math.Atan2(
+		math.Sin(headingRad)*math.Sin(angularDistance)*math.Cos(latRad),
+		math.Cos(angularDistance)-math.Sin(latRad)*math.Sin(newLatRad),
+	)
+
+	return newLatRad * 180.0 / math.Pi, normalizeLongitude(newLonRad * 180.0 / math.Pi)
+}
+
+func normalizeHeading(heading float64) float64 {
+	value := math.Mod(heading, 360.0)
+	if value < 0 {
+		value += 360.0
+	}
+	return value
+}
+
+func normalizeLongitude(lon float64) float64 {
+	for lon > 180.0 {
+		lon -= 360.0
+	}
+	for lon < -180.0 {
+		lon += 360.0
+	}
+	return lon
 }

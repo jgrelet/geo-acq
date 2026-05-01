@@ -1,0 +1,129 @@
+version: "3"
+
+vars:
+  ROOT_DIR: '{{.TASKFILE_DIR}}'
+  APP_NAME: geo-acq
+  SIM_NAME: simul-gps
+  SOUNDER_SIM_NAME: simul-echosounder
+  MAIN_PKG: ./cmd/geo-acq
+  SIM_PKG: ./cmd/simul/gps
+  SOUNDER_SIM_PKG: ./cmd/simul/echosounder
+  BIN_DIR: bin
+  DIST_DIR: dist
+  GOCACHE: '{{default (printf "%s/.gocache" .ROOT_DIR) .GOCACHE}}'
+  GOMODCACHE: '{{default (printf "%s/.gomodcache" .ROOT_DIR) .GOMODCACHE}}'
+  LDFLAGS: '{{default "" .LDFLAGS}}'
+  APP_BIN:
+    sh: |
+      if [ "{{OS}}" = "windows" ]; then
+        printf "geo-acq.exe"
+      else
+        printf "geo-acq"
+      fi
+  SIM_BIN:
+    sh: |
+      if [ "{{OS}}" = "windows" ]; then
+        printf "simul-gps.exe"
+      else
+        printf "simul-gps"
+      fi
+  SOUNDER_SIM_BIN:
+    sh: |
+      if [ "{{OS}}" = "windows" ]; then
+        printf "simul-echosounder.exe"
+      else
+        printf "simul-echosounder"
+      fi
+  PLATFORMS:
+    sh: printf "windows/amd64 linux/amd64 linux/arm64 darwin/amd64"
+
+env:
+  GOCACHE: "{{.GOCACHE}}"
+  GOMODCACHE: "{{.GOMODCACHE}}"
+
+tasks:
+  default:
+    cmds:
+      - task: help
+
+  help:
+    desc: Show available tasks
+    silent: true
+    cmds:
+      - |
+        printf "%s\n" \
+          "Tasks:" \
+          "  task build          Build {{.APP_NAME}} in {{.BIN_DIR}}/" \
+          "  task build-sim      Build the GPS simulator in {{.BIN_DIR}}/" \
+          "  task build-sim-sounder Build the echosounder simulator in {{.BIN_DIR}}/" \
+          "  task test           Run go test ./..." \
+          "  task fmt            Run gofmt on the repository" \
+          "  task cross-build    Build release binaries in {{.DIST_DIR}}/" \
+          "  task run            Build and run {{.APP_NAME}}" \
+          "  task copy DEST=/path/to/dir   Copy release artifacts and TOML files" \
+          "  task clean          Remove build outputs and local Go caches"
+
+  fmt:
+    desc: Format Go packages
+    cmds:
+      - go fmt ./...
+
+  test:
+    desc: Run Go tests
+    cmds:
+      - go test ./...
+
+  build:
+    desc: Build the main application
+    cmds:
+      - mkdir -p {{.BIN_DIR}}
+      - go build -ldflags "{{.LDFLAGS}}" -o {{.BIN_DIR}}/{{.APP_BIN}} {{.MAIN_PKG}}
+
+  build-sim:
+    desc: Build the GPS simulator
+    cmds:
+      - mkdir -p {{.BIN_DIR}}
+      - go build -ldflags "{{.LDFLAGS}}" -o {{.BIN_DIR}}/{{.SIM_BIN}} {{.SIM_PKG}}
+
+  build-sim-sounder:
+    desc: Build the echosounder simulator
+    cmds:
+      - mkdir -p {{.BIN_DIR}}
+      - go build -ldflags "{{.LDFLAGS}}" -o {{.BIN_DIR}}/{{.SOUNDER_SIM_BIN}} {{.SOUNDER_SIM_PKG}}
+
+  run:
+    desc: Build and run the main application
+    deps: [build]
+    cmds:
+      - ./{{.BIN_DIR}}/{{.APP_BIN}}
+
+  cross-build:
+    desc: Build release binaries for all target platforms
+    cmds:
+      - mkdir -p {{.DIST_DIR}}
+      - |
+        for target in {{.PLATFORMS}}; do
+          os="${target%/*}"
+          arch="${target#*/}"
+          ext=""
+          if [ "$os" = "windows" ]; then ext=".exe"; fi
+          echo ">> building {{.APP_NAME}} for $os/$arch"
+          CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
+            go build -ldflags "{{.LDFLAGS}}" \
+            -o {{.DIST_DIR}}/{{.APP_NAME}}-"$os"-"$arch""$ext" {{.MAIN_PKG}} || exit 1
+        done
+
+  copy:
+    desc: Copy release artifacts and TOML files to DEST
+    requires:
+      vars: [DEST]
+    deps: [cross-build]
+    cmds:
+      - mkdir -p {{.DEST}}
+      - cp {{.DIST_DIR}}/{{.APP_NAME}}-* {{.DEST}}/
+      - cp ./*.toml {{.DEST}}/
+
+  clean:
+    desc: Remove build outputs and local Go caches
+    cmds:
+      - rm -rf {{.BIN_DIR}} {{.DIST_DIR}} {{.GOCACHE}} {{.GOMODCACHE}}

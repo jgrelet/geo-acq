@@ -2,7 +2,7 @@ package config
 
 import (
 	"fmt"
-	"log"
+	"runtime"
 
 	"github.com/BurntSushi/toml"
 )
@@ -18,6 +18,7 @@ type SerialPort struct {
 
 // UDP struct for ethernet port
 type UDP struct {
+	Host string
 	Port string
 }
 
@@ -45,14 +46,28 @@ type Config struct {
 	UDP     map[string]UDP
 }
 
-// New  return a Config struct from the content of toml configFile
-func New(configFile string) Config {
-
+// Load returns a Config struct from the content of toml configFile.
+func Load(configFile string) (Config, error) {
 	cfg := Config{}
-	//  read config file
 	if _, err := toml.DecodeFile(configFile, &cfg); err != nil {
-		log.Fatal(fmt.Sprintf("Error func GetConfig: file= %s -> %s\n", configFile, err))
+		return Config{}, fmt.Errorf("load config %q: %w", configFile, err)
 	}
-	//fmt.Printf("%v\n", cfg)
+	return cfg, nil
+}
+
+// DefaultFile returns the default configuration file for the current OS.
+func DefaultFile() string {
+	if runtime.GOOS == "windows" {
+		return "windows.toml"
+	}
+	return "linux.toml"
+}
+
+// New preserves the historical API.
+func New(configFile string) Config {
+	cfg, err := Load(configFile)
+	if err != nil {
+		panic(fmt.Sprintf("Error func GetConfig: file= %s -> %s\n", configFile, err))
+	}
 	return cfg
 }

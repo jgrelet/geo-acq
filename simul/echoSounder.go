@@ -1,49 +1,49 @@
 package simul
 
 import (
+	"fmt"
+	"math"
 	"math/rand"
-	"strconv"
-	"strings"
 	"time"
 
 	nmea "github.com/jgrelet/go-nmea"
 )
 
-const payload = "108.34,f,33.02,M,18.06,F"
+const metersToFeet = 3.280839895
+const metersToFathoms = 0.546806649
 
-// EchoSounderChan
-var (
-	EchoSounderChan chan interface{}
-)
+// NewEchoSounder simulates DBT sentences every interval.
+func NewEchoSounder(interval time.Duration, startDepthMeters float64) <-chan string {
+	out := make(chan string)
+	ticker := time.NewTicker(interval)
+	depthMeters := startDepthMeters
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 
-// EchoSounder simulate echoSounder
-func EchoSounder() {
-	tickChan := time.NewTicker(time.Millisecond * 600).C
-
-	// initialize DBT sentence
-	dbt := nmea.Message{}
-	dbt.Type = nmea.TypeIDs["GPDBT"]
-	dbt.Fields = strings.Split(payload, nmea.FieldDelimiter)
-	depth, _ := strconv.ParseFloat(dbt.Fields[0], 64)
-
-	for {
-		select {
-		case <-tickChan:
-			dbt.Fields[0] = time.Now().Format("150405.000")
-
-			depthInMeters, depthInFeet, depthInFathoms := computeNextDepth(depth)
-			dbt.Fields[0] = strconv.FormatFloat(depthInFeet, 'f', 2, 64)
-			dbt.Fields[2] = strconv.FormatFloat(depthInMeters, 'f', 2, 64)
-			dbt.Fields[4] = strconv.FormatFloat(depthInFathoms, 'f', 2, 64)
-			dbt.Checksum = dbt.ComputeChecksum()
-			// s := gga.Serialize()
-			// fmt.Printf("%v\n", s)
-			EchoSounderChan <- dbt.Serialize()
-		}
+	sentenceDBT, err := nmea.Parse("$GPDBT,108.34,f,33.02,M,18.06,F*35")
+	if err != nil {
+		panic(fmt.Sprintf("unable to decode dbt sentence: %v", err))
 	}
+	dbt := sentenceDBT.(*nmea.GPDBT)
+
+	go func() {
+		defer ticker.Stop()
+		for range ticker.C {
+			depthMeters = computeNextDepth(depthMeters, rng)
+			dbt.DepthInMeters = depthMeters
+			dbt.DepthInFeet = depthMeters * metersToFeet
+			dbt.DepthInFathoms = depthMeters * metersToFathoms
+			out <- dbt.Serialize()
+		}
+	}()
+
+	return out
 }
 
-// from depth, compute a new randon depth in meters, feet and fathoms
-func computeNextDepth(depth float64) (float64, float64, float64) {
-	return (rand.Float64() * 5) + depth, depth / 0.3048, depth * 0.5468
+// computeNextDepth generates a bounded random walk around the previous depth.
+func computeNextDepth(depth float64, rng *rand.Rand) float64 {
+	next := depth + (rng.Float64()-0.5)*0.8
+	if next < 0.5 {
+		next = 0.5
+	}
+	return math.Round(next*100) / 100
 }

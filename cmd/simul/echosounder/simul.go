@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/jgrelet/geo-acq/config"
 	"github.com/jgrelet/geo-acq/devices"
@@ -14,6 +15,8 @@ import (
 // main entry
 func main() {
 	configPath := flag.String("config", config.DefaultFile(), "configuration TOML file")
+	interval := flag.Duration("interval", 600*time.Millisecond, "sounder emission interval")
+	depth := flag.Float64("depth", 12.0, "initial depth in meters")
 	flag.Parse()
 
 	cfg, err := config.Load(*configPath)
@@ -21,18 +24,17 @@ func main() {
 		log.Fatal(err)
 	}
 
-	gps := devices.New("gps", cfg)
-	if err := gps.Connect(); err != nil {
+	sounder := devices.New("echosounder", cfg)
+	if err := sounder.Connect(); err != nil {
 		log.Fatal(err)
 	}
-	defer gps.Disconnect()
+	defer sounder.Disconnect()
 
-	// new GPS task every second, with SOG=10knt and COG=90 deg
-	nmea := simul.NewGps(1, 10, 90)
+	dbt := simul.NewEchoSounder(*interval, *depth)
 	for {
-		sentence := <-nmea
+		sentence := <-dbt
 		fmt.Println("Send: " + sentence)
-		if err := gps.Write(sentence + util.CR + util.LF); err != nil {
+		if err := sounder.Write(sentence + util.CR + util.LF); err != nil {
 			log.Fatal(err)
 		}
 	}

@@ -1,38 +1,38 @@
 [global]
-mission        = "test"
-author         = "jgrelet IRD jan 2018"
+mission        = "udp-listener"
+author         = "codex"
 debug          = false
 echo           = true
-log            = "geo-acq.log"
+log            = "geo-acq-udp-listener.log"
 
 [acq]
-file           = "geo-acq.txt"
+file           = "geo-acq-udp-listener.txt"
 
 [devices]
 
 	[devices.gps]
 	type           = "nmea"
 	use            = true
-	device         = "serial"
+	device         = "udp"
 
 	[devices.echosounder]
 	type           = "nmea"
-	use            = false
-	device         = "serial"
+	use            = true
+	device         = "udp"
 
 [serials]
 
 	[serials.gps]
-	port 	       = "COM21"
+	port           = "COM21"
 	baud           = 4800
-	parity	       = "none"
+	parity         = "none"
 	databit        = 8
 	stopbit        = 1
 
 	[serials.echosounder]
-	port 	       = "COM16"
+	port           = "COM16"
 	baud           = 4800
-	parity	       = "none"
+	parity         = "none"
 	databit        = 8
 	stopbit        = 1
 
@@ -45,6 +45,3 @@ file           = "geo-acq.txt"
 	[udp.echosounder]
 	host           = ""
 	port           = "10184"
-
-
-
