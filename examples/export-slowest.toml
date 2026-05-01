@@ -1,7 +1,7 @@
 [mission]
 name           = "udp-listener"
-pi             = "codex"
-organization   = "OpenAI"
+pi             = "the PI"
+organization   = "theName"
 
 [acq]
 file           = "examples/geo-acq-udp-listener.sqlite"

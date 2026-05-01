@@ -1,7 +1,7 @@
 [mission]
 name           = "udp-sender"
-pi             = "codex"
-organization   = "OpenAI"
+pi             = "the PI"
+organization   = "theName"
 
 [global]
 debug          = false
