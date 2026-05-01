@@ -29,14 +29,30 @@ type Device struct {
 	Device string
 }
 
+// Mission describes the current acquisition campaign metadata.
+type Mission struct {
+	Name         string
+	PI           string
+	Organization string
+}
+
+// Export describes offline extraction parameters from a SQLite raw acquisition database.
+type Export struct {
+	Database  string `toml:"database"`
+	Output    string `toml:"output"`
+	Mode      string `toml:"mode"`
+	Interval  string `toml:"interval"`
+	Mission   string `toml:"mission"`
+	SessionID int64  `toml:"session_id"`
+}
+
 // Config is the Go representation of toml file
 type Config struct {
-	Global struct {
-		Mission string
-		Author  string
-		Debug   bool
-		Echo    bool
-		Log     string
+	Mission Mission
+	Global  struct {
+		Debug bool
+		Echo  bool
+		Log   string
 	}
 	Acq struct {
 		File string
@@ -44,6 +60,7 @@ type Config struct {
 	Devices map[string]Device
 	Serials map[string]SerialPort
 	UDP     map[string]UDP
+	Export  Export
 }
 
 // Load returns a Config struct from the content of toml configFile.

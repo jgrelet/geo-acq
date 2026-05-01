@@ -1,0 +1,15 @@
+[mission]
+name           = "udp-listener"
+pi             = "codex"
+organization   = "OpenAI"
+
+[acq]
+file           = "examples/geo-acq-udp-listener.sqlite"
+
+[export]
+database       = "geo-acq-udp-listener.sqlite"
+output         = "export-fixed.tsv"
+mode           = "fixed_interval"
+mission        = "udp-listener"
+session_id     = 0
+interval       = "1s"

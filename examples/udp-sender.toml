@@ -1,12 +1,15 @@
+[mission]
+name           = "udp-sender"
+pi             = "codex"
+organization   = "OpenAI"
+
 [global]
-mission        = "udp-sender"
-author         = "codex"
 debug          = false
 echo           = true
 log            = "geo-acq-udp-sender.log"
 
 [acq]
-file           = "geo-acq-udp-sender.txt"
+file           = "geo-acq-udp-sender.sqlite"
 
 [devices]
 

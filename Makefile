@@ -2,8 +2,10 @@ SHELL := /bin/sh
 
 APP_NAME := geo-acq
 SIM_NAME := simul-gps
+EXPORT_NAME := geo-export
 MAIN_PKG := ./cmd/geo-acq
 SIM_PKG := ./cmd/simul/gps
+EXPORT_PKG := ./cmd/export
 BIN_DIR := bin
 DIST_DIR := dist
 GO ?= go
@@ -18,20 +20,23 @@ LDFLAGS ?=
 ifeq ($(OS),Windows_NT)
 APP_BIN := $(APP_NAME).exe
 SIM_BIN := $(SIM_NAME).exe
+EXPORT_BIN := $(EXPORT_NAME).exe
 else
 APP_BIN := $(APP_NAME)
 SIM_BIN := $(SIM_NAME)
+EXPORT_BIN := $(EXPORT_NAME)
 endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help fmt test build build-sim run cross-build clean copy
+.PHONY: help fmt test build build-sim build-export run cross-build clean copy
 
 help:
 	@printf "%s\n" \
 		"Targets:" \
 		"  make build         Build $(APP_NAME) in $(BIN_DIR)/" \
 		"  make build-sim     Build the GPS simulator in $(BIN_DIR)/" \
+		"  make build-export  Build the export tool in $(BIN_DIR)/" \
 		"  make test          Run go test ./..." \
 		"  make fmt           Run gofmt on the repository" \
 		"  make cross-build   Build release binaries in $(DIST_DIR)/" \
@@ -52,6 +57,10 @@ build:
 build-sim:
 	mkdir -p $(BIN_DIR)
 	$(GOENV) $(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(SIM_BIN) $(SIM_PKG)
+
+build-export:
+	mkdir -p $(BIN_DIR)
+	$(GOENV) $(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(EXPORT_BIN) $(EXPORT_PKG)
 
 run: build
 	./$(BIN_DIR)/$(APP_BIN)

@@ -1,12 +1,15 @@
+[mission]
+name           = "udp-listener"
+pi             = "codex"
+organization   = "OpenAI"
+
 [global]
-mission        = "udp-listener"
-author         = "codex"
 debug          = false
 echo           = true
 log            = "geo-acq-udp-listener.log"
 
 [acq]
-file           = "geo-acq-udp-listener.txt"
+file           = "geo-acq-udp-listener.sqlite"
 
 [devices]
 

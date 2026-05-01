@@ -51,4 +51,6 @@ task build-sim-sounder
 - `examples/udp-listener.toml` listens on `127.0.0.1:10183`
 - `examples/udp-sender.toml` sends GPS NMEA frames to `127.0.0.1:10183`
 - The echosounder simulator sends DBT frames to `127.0.0.1:10184`
+- Raw frames are stored in `geo-acq-udp-listener.sqlite`
+- `geo-export` can later convert the SQLite raw frames into TSV
 - To test on another machine, replace `127.0.0.1` in `examples/udp-sender.toml` with the receiver IP

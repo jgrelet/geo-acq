@@ -5,9 +5,11 @@ vars:
   APP_NAME: geo-acq
   SIM_NAME: simul-gps
   SOUNDER_SIM_NAME: simul-echosounder
+  EXPORT_NAME: geo-export
   MAIN_PKG: ./cmd/geo-acq
   SIM_PKG: ./cmd/simul/gps
   SOUNDER_SIM_PKG: ./cmd/simul/echosounder
+  EXPORT_PKG: ./cmd/export
   BIN_DIR: bin
   DIST_DIR: dist
   GOCACHE: '{{default (printf "%s/.gocache" .ROOT_DIR) .GOCACHE}}'
@@ -34,6 +36,13 @@ vars:
       else
         printf "simul-echosounder"
       fi
+  EXPORT_BIN:
+    sh: |
+      if [ "{{OS}}" = "windows" ]; then
+        printf "geo-export.exe"
+      else
+        printf "geo-export"
+      fi
   PLATFORMS:
     sh: printf "windows/amd64 linux/amd64 linux/arm64 darwin/amd64"
 
@@ -56,6 +65,7 @@ tasks:
           "  task build          Build {{.APP_NAME}} in {{.BIN_DIR}}/" \
           "  task build-sim      Build the GPS simulator in {{.BIN_DIR}}/" \
           "  task build-sim-sounder Build the echosounder simulator in {{.BIN_DIR}}/" \
+          "  task build-export   Build the export tool in {{.BIN_DIR}}/" \
           "  task test           Run go test ./..." \
           "  task fmt            Run gofmt on the repository" \
           "  task cross-build    Build release binaries in {{.DIST_DIR}}/" \
@@ -90,6 +100,12 @@ tasks:
     cmds:
       - mkdir -p {{.BIN_DIR}}
       - go build -ldflags "{{.LDFLAGS}}" -o {{.BIN_DIR}}/{{.SOUNDER_SIM_BIN}} {{.SOUNDER_SIM_PKG}}
+
+  build-export:
+    desc: Build the export tool
+    cmds:
+      - mkdir -p {{.BIN_DIR}}
+      - go build -ldflags "{{.LDFLAGS}}" -o {{.BIN_DIR}}/{{.EXPORT_BIN}} {{.EXPORT_PKG}}
 
   run:
     desc: Build and run the main application

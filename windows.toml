@@ -1,12 +1,15 @@
+[mission]
+name           = "test"
+pi             = "jgrelet"
+organization   = "IRD"
+
 [global]
-mission        = "test"
-author         = "jgrelet IRD jan 2018"
 debug          = false
 echo           = true
 log            = "geo-acq.log"
 
 [acq]
-file           = "geo-acq.txt"
+file           = "geo-acq.sqlite"
 
 [devices]
 
