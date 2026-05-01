@@ -1,123 +1,203 @@
-## Description
+# geo-acq
 
-GEO-ACQ is an acquisition program
+`geo-acq` is a Go application for acquiring NMEA data from marine instruments such as:
 
 - GPS
 - Echosounder
-- OTT Radar
+- Radar
 
-running on a Raspberry Pi
+The project currently supports:
 
-## Windows prerequisites  
+- acquisition from `serial` or `udp` transports
+- GPS simulation
+- echosounder simulation
+- local build/test workflows with `make` and `task`
 
-Install MinGW with Msys. If you use Visual Studio Code, configure the terminal shell with msys. See: https://code.visualstudio.com/docs/editor/integrated-terminal#_configuration
+## Repository layout
 
-Add the following line to your user/setting.json file:
+- `cmd/geo-acq`: main acquisition binary
+- `cmd/simul/gps`: GPS simulator binary
+- `cmd/simul/echosounder`: echosounder simulator binary
+- `config/`: configuration loading
+- `devices/`: serial and UDP transport layer
+- `simul/`: simulation logic
+- `examples/`: ready-to-use sample configurations
 
-  "terminal.integrated.shell.windows": "C:\\MinGW\\msys\\1.0\\bin\\bash.exe",
+## Requirements
 
-You must define Windows env variables :
+- Go 1.19 or newer
+- GNU Make if you want to use the `Makefile`
+- [Task](https://taskfile.dev/) if you want to use `Taskfile.yml`
 
-GOBIN=%USERPROFILE%\go\bin 
+On Windows, Git Bash works well with the current `Makefile` and `Taskfile`.
 
-and 
+## Build and test
 
-GOPATH=%USERPROFILE%\go
-
-and add the C:\MinGW\msys\1.0\bin directory to your Windows path.
-
-Test inside terminal:
-
-> make --version
-GNU Make 3.81
-
-
-## Development
-
-Clone the go-serial git repository directly into your src folder under src/go.bug.st/serial.v1 and checkout the branch v1.
-
-```bash
-cd $GOPATH
-mkdir -p src/go.bug.st/
-git clone https://github.com/bugst/go-serial.git -b v1 src/go.bug.st/serial.v1
-go test go.bug.st/serial.v1
-```
-
-Install and use package:
-
-A fork of github.com/pilebones/go-nmea:
-
-- github.com/jgrelet/go-nmea
-- github.com/creack/goselect
-- github.com/pborman/getopt/v2
-- github.com/BurntSushi/toml
-
-## Compilation
-
-Under development:
+### Task
 
 ```bash
-> go build
+task help
+task test
+task build
+task build-sim
+task build-sim-sounder
 ```
 
-To build all plateform targets under production:
+### Make
 
 ```bash
-> make
+make help
+make test
+make build
+make build-sim
+make cross-build
 ```
 
-To build specific  targets (linux/amd64, windows/amd64, linux/arm or darwin/amd64windows) under production:
+Build outputs are written to `bin/` and release artifacts to `dist/`.
+
+## Configuration
+
+The runtime selects a default configuration file from the OS:
+
+- `windows.toml` on Windows
+- `linux.toml` on Linux and macOS
+
+You can always override it with `-config`:
 
 ```bash
-> make linux/arm
-...
->  ls -l *linux-arm*
--rw-r--r-- 1  nmea-proto-linux-arm
+./bin/geo-acq.exe -config windows.toml
+./bin/geo-acq -config linux.toml
 ```
 
-## Usage
+Each device is configured with:
+
+- a logical section in `[devices]`
+- a transport type: `serial` or `udp`
+- a matching section in `[serials]` or `[udp]`
+
+For UDP:
+
+- `host = ""` means listener mode
+- `host = "127.0.0.1"` or another IP means sender mode
+
+## Acquisition mode
+
+The acquisition binary reads incoming NMEA sentences and prints them to stdout.
+
+### Serial acquisition
+
+On Windows:
 
 ```bash
-> ./nmea-proto-linux-arm -h
-Usage: c:\users\jgrelet\go\src\bitbucket.org\jgrelet\raspberry\go\dev\dev.exe [-dehlv] [-c nmea.toml] [-s value] [-t value] [parameters ...]
- -c, --config=nmea.toml
-                    use specific configuration .toml file
- -d, --debug        Display debug info
- -e, --echo         Display processing in stdout
- -h, --help         Help
- -l, --log          Write log, defaut is true
- -s, --simul=value  Simulate: GPS, Echo-sounder or Radar
- -t, --trace=value  Display terminal for: GPS, Echo-sounder or Radar
- -v, --version      Show version, then exit.
+task build
+./bin/geo-acq.exe -config windows.toml
 ```
 
-Run in simulation mode, with error log to stdout and terminal mode:
+On Linux:
 
 ```bash
-> ./under production: -e -s gps,sounder -t gps,sounder -l -c linux.toml
-
-[NMEA START]2017/12/06 09:19:58 Acquisition Begin
-$GPDBT,355.45,f,111.36,M,59.24,F*0A
-Depth in meters:  111.36
-$GPGGA,091959.871,.999977,N,2300.000045,E,1,17,0.6,0051.6,M,0.0,M,,*6D
-Time: 2017/12/06 09:19:59Z
-Quality: GNSS fix
-Latitude: 0° 0' 59.998620"
-Longitude: 23° 0' 0.002700"
-$GPDBT,355.45,f,113.04,M,59.24,F*09
-Depth in meters:  113.04
-$GPDBT,355.45,f,111.66,M,59.24,F*0F
-Depth in meters:  111.66
-$GPGGA,092000.871,.999954,N,2300.000091,E,1,17,0.6,0051.6,M,0.0,M,,*63
-Time: 2017/12/06 09:20:00Z
-Quality: GNSS fix
-Latitude: 0° 0' 59.997240"
-Longitude: 23° 0' 0.005460"
-...
+task build
+./bin/geo-acq -config linux.toml
 ```
 
-Option -d (debug) is an alias for options: -e -s gps,sounder -t gps,sounder
+### UDP acquisition
+
+Use the sample listener configuration:
 
 ```bash
-> nmea-proto-linux-arm -d -c linux.toml
+task build
+./bin/geo-acq.exe -config examples/udp-listener.toml
 ```
+
+On Linux/macOS:
+
+```bash
+task build
+./bin/geo-acq -config examples/udp-listener.toml
+```
+
+The listener example enables:
+
+- GPS on UDP port `10183`
+- echosounder on UDP port `10184`
+
+## Simulation mode
+
+The simulators generate NMEA sentences and send them to the configured transport.
+
+### GPS simulation
+
+```bash
+task build-sim
+./bin/simul-gps.exe -config examples/udp-sender.toml
+```
+
+On Linux/macOS:
+
+```bash
+task build-sim
+./bin/simul-gps -config examples/udp-sender.toml
+```
+
+The GPS simulator currently emits:
+
+- `GPGGA`
+- `GPVTG`
+
+### Echosounder simulation
+
+```bash
+task build-sim-sounder
+./bin/simul-echosounder.exe -config examples/udp-sender.toml
+```
+
+On Linux/macOS:
+
+```bash
+task build-sim-sounder
+./bin/simul-echosounder -config examples/udp-sender.toml
+```
+
+Optional flags:
+
+- `-interval 600ms`: emission interval
+- `-depth 12.0`: initial depth in meters
+
+The echosounder simulator emits `GPDBT`.
+
+## End-to-end UDP example
+
+Terminal 1, start the acquisition listener:
+
+```bash
+task build
+./bin/geo-acq.exe -config examples/udp-listener.toml
+```
+
+Terminal 2, start the GPS simulator:
+
+```bash
+task build-sim
+./bin/simul-gps.exe -config examples/udp-sender.toml
+```
+
+Terminal 3, start the echosounder simulator:
+
+```bash
+task build-sim-sounder
+./bin/simul-echosounder.exe -config examples/udp-sender.toml
+```
+
+For a multi-machine test, replace `127.0.0.1` in `examples/udp-sender.toml` with the IP address of the receiver host.
+
+## Example files
+
+- `examples/udp-listener.toml`: UDP receiver config for `geo-acq`
+- `examples/udp-sender.toml`: UDP sender config for simulators
+- `docs/udp-test.md`: short UDP test memo
+
+## Notes
+
+- Local Go caches are redirected to `.gocache/` and `.gomodcache/` by the `Taskfile`
+- The serial reader now consumes complete NMEA lines terminated by `CRLF`
+- UDP is implemented for both acquisition and simulation workflows
