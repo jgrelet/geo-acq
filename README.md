@@ -61,6 +61,10 @@ make cross-build
 
 Build outputs are written to `bin/` and release artifacts to `dist/`.
 
+## Developer notes
+
+- `docs/git-worktree-memo.md`: short memo for the current `git worktree` workflow used in this project
+
 ## Wails GUI prototype
 
 A first desktop GUI prototype is available with Wails at the repository root.
@@ -69,9 +73,11 @@ It is intended for evaluation, not as a final production UI yet.
 What it currently provides:
 
 - load and display the active TOML configuration
-- save edited TOML back to the current config file
-- separate device panels for `gps` and `echosounder`
-- live raw-frame terminal view
+- choose a `.toml` file from a native file dialog
+- edit the full TOML file inside the GUI and save it back to disk
+- tabbed views for configuration, device panels, raw terminal frames, and available inputs
+- separate device panels for configured devices
+- live raw-frame terminal view with source filtering
 - live acquisition mode using configured devices
 - demo mode using the existing GPS and echosounder simulators
 
@@ -88,6 +94,122 @@ make build-gui-wails
 ```
 
 The generated executable is written to `build/bin/geo-acq-gui.exe` on Windows.
+
+### Current Wails GUI behaviour
+
+The current Wails desktop prototype is organised as follows:
+
+- a startup banner showing application readiness
+- a control bar with:
+  - config path field
+  - `Choose file`
+  - `Load config`
+  - `Edit config`
+  - `Refresh ports`
+  - `Start`
+  - `Start demo`
+  - `Stop`
+- a central tabbed area with:
+  - `Current config`
+  - `Device panels`
+  - `Terminal raw frames`
+  - `Available inputs`
+
+The default operational tab is `Device panels`.
+When `Start` or `Start demo` is used, the interface stays focused on the device view.
+
+### Config workflow in the Wails GUI
+
+Current configuration handling works like this:
+
+1. The path field contains the current TOML path.
+2. `Choose file` opens a native file dialog restricted to `*.toml`.
+3. `Load config` reads the selected file and refreshes the GUI state.
+4. `Edit config` opens a full-screen TOML editor overlay.
+5. `Validate config` writes the edited TOML back to the current file and reloads it.
+
+The GUI does not yet expose structured per-field forms for mission, devices, serial ports, or UDP settings.
+At the moment, configuration editing is done on the raw TOML file as text.
+
+### Device panels in the Wails GUI
+
+The `Device panels` tab currently displays one card per configured device.
+Each panel shows:
+
+- device name
+- transport and configured port
+- current status
+- device type
+- whether the device is enabled
+- number of frames seen
+- last sentence type
+- last seen timestamp
+- decoded payload rendered from JSON when available
+
+The raw frame is no longer repeated in the device card because it is already visible in the terminal tab.
+
+### Terminal view in the Wails GUI
+
+The `Terminal raw frames` tab is intended as the diagnostic console.
+
+It currently shows:
+
+- the latest raw terminal lines produced from incoming frames
+- timestamps
+- device name
+- transport
+- port
+- sentence type
+- raw NMEA payload
+
+A source selector filters the displayed frames.
+The current filter values are built from the known runtime sources, for example:
+
+- `serial:COM3`
+- `serial:COM16`
+- `udp:10183`
+- `udp:10184`
+
+### Available inputs tab
+
+The `Available inputs` tab currently lists the detected serial ports exposed by the runtime.
+This is mainly a quick operator check to confirm that expected serial inputs are visible before starting acquisition.
+
+### Live mode in the Wails GUI
+
+When `Start` is used:
+
+1. the current configuration is validated and loaded if needed
+2. enabled devices are opened using the configured transport
+3. frames are read from live devices
+4. each frame is timestamped
+5. each frame is decoded when possible
+6. the raw frame plus decoded JSON are stored in SQLite
+7. the GUI is updated through Wails runtime events
+
+### Demo mode in the Wails GUI
+
+When `Start demo` is used:
+
+1. a normal SQLite acquisition session is still created
+2. live devices are not opened
+3. simulated GPS and echosounder frames are generated from existing simulator logic
+4. these frames follow the same GUI update and storage pipeline as live frames
+
+This makes demo mode useful for interface testing without connected instruments.
+
+### Current implementation limits
+
+At the moment, the Wails GUI is still a prototype.
+Some known limits of the current implementation are:
+
+- decoded payloads are still shown as pretty-printed JSON, not instrument-specific widgets
+- configuration editing is raw TOML only
+- the source filter is simple and based on transport/port labels
+- there is no dedicated form validation UI beyond TOML parsing errors
+- there is no long-term session history browser inside the GUI yet
+
+This section documents the current behaviour intentionally, so it can be updated later as the GUI evolves.
 
 ## Configuration
 
