@@ -7,6 +7,7 @@ nmea-proto-*
 *.txt
 *.json
 *.log
+*.sqlite
 *.swp
 
 # Test binary, build with `go test -c`

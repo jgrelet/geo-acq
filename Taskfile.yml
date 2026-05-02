@@ -63,6 +63,7 @@ tasks:
         printf "%s\n" \
           "Tasks:" \
           "  task build          Build {{.APP_NAME}} in {{.BIN_DIR}}/" \
+          "  task build-all      Build all binaries in {{.BIN_DIR}}/" \
           "  task build-sim      Build the GPS simulator in {{.BIN_DIR}}/" \
           "  task build-sim-sounder Build the echosounder simulator in {{.BIN_DIR}}/" \
           "  task build-export   Build the export tool in {{.BIN_DIR}}/" \
@@ -88,6 +89,10 @@ tasks:
     cmds:
       - mkdir -p {{.BIN_DIR}}
       - go build -ldflags "{{.LDFLAGS}}" -o {{.BIN_DIR}}/{{.APP_BIN}} {{.MAIN_PKG}}
+
+  build-all:
+    desc: Build all project binaries
+    deps: [build, build-sim, build-sim-sounder, build-export]
 
   build-sim:
     desc: Build the GPS simulator

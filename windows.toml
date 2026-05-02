@@ -26,7 +26,7 @@ file           = "geo-acq.sqlite"
 [serials]
 
 	[serials.gps]
-	port 	       = "COM21"
+	port 	       = "COM3"
 	baud           = 4800
 	parity	       = "none"
 	databit        = 8

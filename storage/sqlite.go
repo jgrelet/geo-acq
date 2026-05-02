@@ -15,10 +15,12 @@ import (
 
 // RawFrame stores one received NMEA sentence with its acquisition metadata.
 type RawFrame struct {
-	ReceivedAt time.Time
-	DeviceName string
-	Transport  string
-	Payload    string
+	ReceivedAt   time.Time
+	DeviceName   string
+	Transport    string
+	Payload      string
+	SentenceType string
+	DecodedJSON  string
 }
 
 // SQLiteStore persists raw acquisition frames in append-only form.
@@ -81,8 +83,10 @@ func OpenSQLite(path string, mission config.Mission, configFile string) (*SQLite
 			received_at_utc,
 			device_name,
 			transport,
-			payload
-		) VALUES (?, ?, ?, ?, ?, ?)
+			payload,
+			sentence_type,
+			decoded_json
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		db.Close()
@@ -119,6 +123,8 @@ func (s *SQLiteStore) SaveRawFrame(frame RawFrame) error {
 		frame.DeviceName,
 		frame.Transport,
 		frame.Payload,
+		frame.SentenceType,
+		frame.DecodedJSON,
 	)
 	if err != nil {
 		return fmt.Errorf("insert raw frame: %w", err)
@@ -167,6 +173,8 @@ CREATE TABLE IF NOT EXISTS raw_frames (
 	device_name TEXT NOT NULL,
 	transport TEXT NOT NULL,
 	payload TEXT NOT NULL,
+	sentence_type TEXT NOT NULL DEFAULT '',
+	decoded_json TEXT NOT NULL DEFAULT '',
 	FOREIGN KEY (session_id) REFERENCES acquisition_sessions(id),
 	FOREIGN KEY (mission_id) REFERENCES missions(id)
 );
@@ -180,6 +188,45 @@ CREATE INDEX IF NOT EXISTS idx_raw_frames_device_time
 
 	if _, err := s.db.Exec(schema); err != nil {
 		return fmt.Errorf("initialize sqlite schema: %w", err)
+	}
+	if err := s.ensureColumn("raw_frames", "sentence_type", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := s.ensureColumn("raw_frames", "decoded_json", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *SQLiteStore) ensureColumn(table string, column string, definition string) error {
+	rows, err := s.db.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
+	if err != nil {
+		return fmt.Errorf("inspect sqlite table %s: %w", table, err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var (
+			cid        int
+			name       string
+			kind       string
+			notNull    int
+			defaultVal interface{}
+			pk         int
+		)
+		if err := rows.Scan(&cid, &name, &kind, &notNull, &defaultVal, &pk); err != nil {
+			return fmt.Errorf("scan sqlite column for %s: %w", table, err)
+		}
+		if name == column {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate sqlite columns for %s: %w", table, err)
+	}
+
+	if _, err := s.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, definition)); err != nil {
+		return fmt.Errorf("add sqlite column %s.%s: %w", table, column, err)
 	}
 	return nil
 }

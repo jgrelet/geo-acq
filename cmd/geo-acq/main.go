@@ -11,15 +11,19 @@ import (
 	"time"
 
 	"github.com/jgrelet/geo-acq/config"
+	"github.com/jgrelet/geo-acq/decoder"
 	"github.com/jgrelet/geo-acq/devices"
 	"github.com/jgrelet/geo-acq/storage"
 )
 
 type deviceMessage struct {
-	receivedAt time.Time
-	deviceName string
-	transport  string
-	payload    string
+	receivedAt   time.Time
+	deviceName   string
+	transport    string
+	port         string
+	payload      string
+	sentenceType string
+	decodedJSON  string
 }
 
 // main entry
@@ -51,15 +55,31 @@ func main() {
 		if err := dev.Connect(); err != nil {
 			log.Fatalf("connect %s: %v", deviceName, err)
 		}
+		log.Printf("connected %s on %s %s", deviceName, cfg.Devices[deviceName].Device, dev.Port())
 		managedDevices = append(managedDevices, dev)
 
 		go func(name string, transport string, d *devices.Device) {
 			for msg := range d.Data {
+				decoded, err := decoder.DecodeNMEA(msg)
+				if err != nil && cfg.Global.Debug {
+					log.Printf("decode %s frame: %v", name, err)
+				}
+
+				sentenceType := ""
+				decodedJSON := ""
+				if err == nil {
+					sentenceType = decoded.SentenceType
+					decodedJSON = decoded.JSON
+				}
+
 				messageCh <- deviceMessage{
-					receivedAt: time.Now().UTC(),
-					deviceName: name,
-					transport:  transport,
-					payload:    msg,
+					receivedAt:   time.Now().UTC(),
+					deviceName:   name,
+					transport:    transport,
+					port:         d.Port(),
+					payload:      msg,
+					sentenceType: sentenceType,
+					decodedJSON:  decodedJSON,
 				}
 			}
 		}(deviceName, cfg.Devices[deviceName].Device, dev)
@@ -78,13 +98,15 @@ func main() {
 		select {
 		case msg := <-messageCh:
 			if cfg.Global.Echo {
-				fmt.Printf("[%s] %s\n", msg.deviceName, msg.payload)
+				fmt.Println(formatTerminalFrame(msg))
 			}
 			if err := store.SaveRawFrame(storage.RawFrame{
-				ReceivedAt: msg.receivedAt,
-				DeviceName: msg.deviceName,
-				Transport:  msg.transport,
-				Payload:    msg.payload,
+				ReceivedAt:   msg.receivedAt,
+				DeviceName:   msg.deviceName,
+				Transport:    msg.transport,
+				Payload:      msg.payload,
+				SentenceType: msg.sentenceType,
+				DecodedJSON:  msg.decodedJSON,
 			}); err != nil {
 				log.Fatal(err)
 			}
@@ -93,6 +115,23 @@ func main() {
 			return
 		}
 	}
+}
+
+func formatTerminalFrame(msg deviceMessage) string {
+	sentenceType := msg.sentenceType
+	if sentenceType == "" {
+		sentenceType = "RAW"
+	}
+
+	return fmt.Sprintf(
+		"%s | %-12s | %-6s | %-8s | %-5s | %s",
+		msg.receivedAt.UTC().Format(time.RFC3339),
+		msg.deviceName,
+		msg.transport,
+		msg.port,
+		sentenceType,
+		msg.payload,
+	)
 }
 
 func enabledDeviceNames(cfg config.Config) []string {
