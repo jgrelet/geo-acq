@@ -11,6 +11,11 @@ EXPORT_PKG := ./cmd/export
 BIN_DIR := bin
 DIST_DIR := dist
 GO ?= go
+ifeq ($(OS),Windows_NT)
+WAILS ?= $(USERPROFILE)/go/bin/wails.exe
+else
+WAILS ?= $(HOME)/go/bin/wails
+endif
 
 PLATFORMS ?= windows/amd64 linux/amd64 linux/arm64 darwin/amd64
 
@@ -33,7 +38,7 @@ endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help fmt test build build-all build-sim build-sim-sounder build-export run cross-build clean copy
+.PHONY: help fmt test build build-all build-sim build-sim-sounder build-export build-gui-wails run-gui-wails run cross-build clean copy
 
 help:
 	@printf "%s\n" \
@@ -43,6 +48,8 @@ help:
 		"  make build-sim     Build the GPS simulator in $(BIN_DIR)/" \
 		"  make build-sim-sounder Build the echosounder simulator in $(BIN_DIR)/" \
 		"  make build-export  Build the export tool in $(BIN_DIR)/" \
+		"  make build-gui-wails Build the Wails GUI prototype" \
+		"  make run-gui-wails Start the Wails GUI prototype in dev mode" \
 		"  make test          Run go test ./..." \
 		"  make fmt           Run gofmt on the repository" \
 		"  make cross-build   Build release binaries in $(DIST_DIR)/" \
@@ -73,6 +80,12 @@ build-sim-sounder:
 build-export:
 	mkdir -p $(BIN_DIR)
 	$(GOENV) $(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(EXPORT_BIN) $(EXPORT_PKG)
+
+build-gui-wails:
+	$(WAILS) build -clean
+
+run-gui-wails:
+	$(WAILS) dev
 
 run: build
 	./$(BIN_DIR)/$(APP_BIN)

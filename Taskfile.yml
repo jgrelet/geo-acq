@@ -12,6 +12,13 @@ vars:
   EXPORT_PKG: ./cmd/export
   BIN_DIR: bin
   DIST_DIR: dist
+  WAILS_BIN:
+    sh: |
+      if [ "{{OS}}" = "windows" ]; then
+        printf "%s/go/bin/wails.exe" "$USERPROFILE"
+      else
+        printf "%s/go/bin/wails" "$HOME"
+      fi
   GOCACHE: '{{default (printf "%s/.gocache" .ROOT_DIR) .GOCACHE}}'
   GOMODCACHE: '{{default (printf "%s/.gomodcache" .ROOT_DIR) .GOMODCACHE}}'
   LDFLAGS: '{{default "" .LDFLAGS}}'
@@ -67,6 +74,8 @@ tasks:
           "  task build-sim      Build the GPS simulator in {{.BIN_DIR}}/" \
           "  task build-sim-sounder Build the echosounder simulator in {{.BIN_DIR}}/" \
           "  task build-export   Build the export tool in {{.BIN_DIR}}/" \
+          "  task build-gui-wails Build the Wails GUI prototype" \
+          "  task run-gui-wails  Start the Wails GUI prototype in dev mode" \
           "  task test           Run go test ./..." \
           "  task fmt            Run gofmt on the repository" \
           "  task cross-build    Build release binaries in {{.DIST_DIR}}/" \
@@ -111,6 +120,16 @@ tasks:
     cmds:
       - mkdir -p {{.BIN_DIR}}
       - go build -ldflags "{{.LDFLAGS}}" -o {{.BIN_DIR}}/{{.EXPORT_BIN}} {{.EXPORT_PKG}}
+
+  build-gui-wails:
+    desc: Build the Wails GUI prototype
+    cmds:
+      - '"{{.WAILS_BIN}}" build -clean'
+
+  run-gui-wails:
+    desc: Run the Wails GUI prototype in dev mode
+    cmds:
+      - '"{{.WAILS_BIN}}" dev'
 
   run:
     desc: Build and run the main application

@@ -23,6 +23,15 @@ bin/
 dist/
 .gocache/
 .gomodcache/
+frontend/node_modules/
+frontend/dist/*
+!frontend/dist/gitkeep
+build/bin/
 
 # Vendored dependencies
 /vendor
+!wails.json
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/wailsjs/runtime/package.json
+!build/windows/info.json

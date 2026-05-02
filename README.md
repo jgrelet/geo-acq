@@ -44,6 +44,7 @@ task build
 task build-sim
 task build-sim-sounder
 task build-export
+task build-gui-wails
 ```
 
 ### Make
@@ -54,10 +55,39 @@ make test
 make build
 make build-sim
 make build-export
+make build-gui-wails
 make cross-build
 ```
 
 Build outputs are written to `bin/` and release artifacts to `dist/`.
+
+## Wails GUI prototype
+
+A first desktop GUI prototype is available with Wails at the repository root.
+It is intended for evaluation, not as a final production UI yet.
+
+What it currently provides:
+
+- load and display the active TOML configuration
+- save edited TOML back to the current config file
+- separate device panels for `gps` and `echosounder`
+- live raw-frame terminal view
+- live acquisition mode using configured devices
+- demo mode using the existing GPS and echosounder simulators
+
+Build the desktop binary:
+
+```bash
+task build-gui-wails
+```
+
+or:
+
+```bash
+make build-gui-wails
+```
+
+The generated executable is written to `build/bin/geo-acq-gui.exe` on Windows.
 
 ## Configuration
 
