@@ -18,6 +18,10 @@ export function SaveConfig(arg1) {
   return window['go']['main']['App']['SaveConfig'](arg1);
 }
 
+export function SelectConfigFile() {
+  return window['go']['main']['App']['SelectConfigFile']();
+}
+
 export function StartAcquisition() {
   return window['go']['main']['App']['StartAcquisition']();
 }

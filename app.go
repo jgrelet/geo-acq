@@ -212,6 +212,22 @@ func (a *App) SaveConfig(raw string) (AppState, error) {
 	return a.LoadConfig(path)
 }
 
+func (a *App) SelectConfigFile() (string, error) {
+	if a.ctx == nil {
+		return "", fmt.Errorf("application context is not ready")
+	}
+
+	return wruntime.OpenFileDialog(a.ctx, wruntime.OpenDialogOptions{
+		Title: "Select geo-acq config",
+		Filters: []wruntime.FileFilter{
+			{
+				DisplayName: "TOML config",
+				Pattern:     "*.toml",
+			},
+		},
+	})
+}
+
 func (a *App) RefreshSerialPorts() ([]string, error) {
 	ports := discoverSerialPorts()
 	a.mu.Lock()

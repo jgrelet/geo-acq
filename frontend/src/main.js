@@ -7,6 +7,7 @@ import {
   LoadConfig,
   RefreshSerialPorts,
   SaveConfig,
+  SelectConfigFile,
   StartAcquisition,
   StartDemo,
   StopAcquisition,
@@ -14,22 +15,23 @@ import {
 
 const state = {
   snapshot: null,
-  activeDevice: "",
+  editorOpen: false,
+  selectedSource: "all",
+  activeTab: "devices",
 };
 
 document.querySelector("#app").innerHTML = `
   <div class="shell">
-    <header class="hero">
-      <div>
-        <p class="eyebrow">geo-acq / prototype Wails</p>
-        <h1>Acquisition cockpit</h1>
-        <p class="subtitle">Configuration, panels par device et vue terminal brute dans une seule interface.</p>
+    <section class="toolbar startup-banner">
+      <div class="startup-copy">
+        <p class="eyebrow">Config</p>
+        <h1>Application prete a demarrer</h1>
       </div>
       <div class="hero-status">
         <span id="run-badge" class="badge badge-idle">idle</span>
         <span id="mode-badge" class="subtle-pill">mode: idle</span>
       </div>
-    </header>
+    </section>
 
     <section class="toolbar">
       <label class="path-input">
@@ -37,10 +39,11 @@ document.querySelector("#app").innerHTML = `
         <input id="config-path" type="text" placeholder="windows.toml" />
       </label>
       <div class="toolbar-actions">
-        <button id="reload-config" class="btn btn-secondary">Reload config</button>
-        <button id="save-config" class="btn btn-secondary">Save config</button>
+        <button id="browse-config" class="btn btn-secondary">Choose file</button>
+        <button id="load-config" class="btn btn-secondary">Load config</button>
+        <button id="edit-config" class="btn btn-secondary">Edit config</button>
         <button id="refresh-ports" class="btn btn-secondary">Refresh ports</button>
-        <button id="start-live" class="btn btn-primary">Start live</button>
+        <button id="start-live" class="btn btn-primary">Start</button>
         <button id="start-demo" class="btn btn-highlight">Start demo</button>
         <button id="stop-session" class="btn btn-danger">Stop</button>
       </div>
@@ -48,47 +51,79 @@ document.querySelector("#app").innerHTML = `
 
     <section id="error-banner" class="error-banner hidden"></section>
 
-    <main class="grid">
-      <section class="card config-card">
-        <div class="card-head">
-          <h2>Current config</h2>
-          <p id="mission-summary" class="muted">No config loaded</p>
+    <section class="tabs-card">
+      <div class="tabs-bar">
+        <button class="tab-btn active" data-tab="config">Current config</button>
+        <button class="tab-btn" data-tab="devices">Device panels</button>
+        <button class="tab-btn" data-tab="terminal">Terminal raw frames</button>
+        <button class="tab-btn" data-tab="inputs">Available inputs</button>
+      </div>
+
+      <main class="tabs-content">
+        <section class="tab-panel" id="tab-config">
+          <section class="card inner-card">
+            <div class="card-head">
+              <h2>Current config</h2>
+              <p id="mission-summary" class="muted">No config loaded</p>
+            </div>
+            <div class="config-metadata" id="config-meta"></div>
+            <div id="session-summary" class="summary-block summary-inline"></div>
+          </section>
+        </section>
+
+        <section class="tab-panel" id="tab-devices">
+          <section class="card inner-card">
+            <div class="card-head">
+              <h2>Device panels</h2>
+              <p class="muted">Etat courant et donnees decodees.</p>
+            </div>
+            <div id="devices-grid" class="devices-grid"></div>
+          </section>
+        </section>
+
+        <section class="tab-panel" id="tab-terminal">
+          <section class="card inner-card">
+            <div class="card-head terminal-head">
+              <div>
+                <h2>Terminal raw frames</h2>
+                <p class="muted">Dernieres trames recues, utiles pour le diagnostic terrain.</p>
+              </div>
+              <label class="terminal-filter">
+                <span>Source</span>
+                <select id="terminal-source"></select>
+              </label>
+            </div>
+            <div id="terminal-view" class="terminal-view"></div>
+          </section>
+        </section>
+
+        <section class="tab-panel" id="tab-inputs">
+          <section class="card inner-card">
+            <div class="card-head">
+              <h2>Available inputs</h2>
+              <p class="muted">Ports serie detectes et sources exposees par la configuration.</p>
+            </div>
+            <div id="serial-ports" class="chip-list chip-list-wide"></div>
+          </section>
+        </section>
+      </main>
+    </section>
+
+    <div id="editor-overlay" class="editor-overlay hidden">
+      <div class="editor-shell">
+        <div class="editor-toolbar">
+          <div>
+            <p class="eyebrow">Edit config</p>
+            <h2>TOML editor</h2>
+          </div>
+          <div class="toolbar-actions">
+            <button id="editor-cancel" class="btn btn-secondary">Cancel</button>
+            <button id="editor-save" class="btn btn-primary">Validate config</button>
+          </div>
         </div>
-        <div class="config-metadata" id="config-meta"></div>
         <textarea id="config-editor" spellcheck="false"></textarea>
-      </section>
-
-      <section class="card devices-card">
-        <div class="card-head">
-          <h2>Device panels</h2>
-          <p class="muted">Etat courant et dernière trame décodée</p>
-        </div>
-        <div id="devices-grid" class="devices-grid"></div>
-      </section>
-
-      <section class="card terminal-card">
-        <div class="card-head">
-          <h2>Terminal raw frames</h2>
-          <p class="muted">Dernières trames reçues, utiles pour le diagnostic terrain</p>
-        </div>
-        <div id="terminal-view" class="terminal-view"></div>
-      </section>
-
-      <section class="card side-card">
-        <div class="card-head">
-          <h2>Environment</h2>
-          <p class="muted">Ports visibles et synthèse runtime</p>
-        </div>
-        <div class="side-section">
-          <h3>Detected serial ports</h3>
-          <div id="serial-ports" class="chip-list"></div>
-        </div>
-        <div class="side-section">
-          <h3>Session notes</h3>
-          <div id="session-summary" class="summary-block"></div>
-        </div>
-      </section>
-    </main>
+      </div>
+    </div>
   </div>
 `;
 
@@ -104,9 +139,27 @@ const elements = {
   runBadge: document.getElementById("run-badge"),
   modeBadge: document.getElementById("mode-badge"),
   errorBanner: document.getElementById("error-banner"),
+  editorOverlay: document.getElementById("editor-overlay"),
+  terminalSource: document.getElementById("terminal-source"),
+  tabButtons: Array.from(document.querySelectorAll(".tab-btn")),
+  tabPanels: {
+    config: document.getElementById("tab-config"),
+    devices: document.getElementById("tab-devices"),
+    terminal: document.getElementById("tab-terminal"),
+    inputs: document.getElementById("tab-inputs"),
+  },
 };
 
-document.getElementById("reload-config").addEventListener("click", async () => {
+document.getElementById("browse-config").addEventListener("click", async () => {
+  await safely(async () => {
+    const selected = await SelectConfigFile();
+    if (selected) {
+      elements.configPath.value = selected;
+    }
+  });
+});
+
+document.getElementById("load-config").addEventListener("click", async () => {
   await safely(async () => {
     const path = elements.configPath.value.trim();
     const snapshot = await LoadConfig(path);
@@ -114,9 +167,20 @@ document.getElementById("reload-config").addEventListener("click", async () => {
   });
 });
 
-document.getElementById("save-config").addEventListener("click", async () => {
+document.getElementById("edit-config").addEventListener("click", () => {
+  state.editorOpen = true;
+  render();
+});
+
+document.getElementById("editor-cancel").addEventListener("click", () => {
+  state.editorOpen = false;
+  render();
+});
+
+document.getElementById("editor-save").addEventListener("click", async () => {
   await safely(async () => {
     const snapshot = await SaveConfig(elements.configEditor.value);
+    state.editorOpen = false;
     applyState(snapshot);
   });
 });
@@ -132,6 +196,7 @@ document.getElementById("refresh-ports").addEventListener("click", async () => {
 document.getElementById("start-live").addEventListener("click", async () => {
   await safely(async () => {
     await StartAcquisition();
+    state.activeTab = "devices";
     applyState(await GetState());
   });
 });
@@ -139,6 +204,7 @@ document.getElementById("start-live").addEventListener("click", async () => {
 document.getElementById("start-demo").addEventListener("click", async () => {
   await safely(async () => {
     await StartDemo();
+    state.activeTab = "devices";
     applyState(await GetState());
   });
 });
@@ -150,6 +216,18 @@ document.getElementById("stop-session").addEventListener("click", async () => {
   });
 });
 
+elements.terminalSource.addEventListener("change", (event) => {
+  state.selectedSource = event.target.value;
+  render();
+});
+
+for (const button of elements.tabButtons) {
+  button.addEventListener("click", () => {
+    state.activeTab = button.dataset.tab;
+    render();
+  });
+}
+
 EventsOn("geoacq:state", (payload) => {
   if (payload) {
     applyState(payload);
@@ -160,9 +238,9 @@ EventsOn("geoacq:frame", (frame) => {
   if (!state.snapshot || !frame) {
     return;
   }
+
   const snapshot = structuredClone(state.snapshot);
   snapshot.terminalFrames = [...(snapshot.terminalFrames || []), frame].slice(-200);
-
   snapshot.devices = (snapshot.devices || []).map((device) => {
     if (device.name !== frame.deviceName) {
       return device;
@@ -173,8 +251,7 @@ EventsOn("geoacq:frame", (frame) => {
       frameCount: (device.frameCount || 0) + 1,
       lastSeen: frame.receivedAt,
       lastSentenceType: frame.sentenceType,
-      lastRawFrame: frame.payload,
-      decodedJson: prettyFrameJSON(frame.decodedJson),
+      decodedJson: frame.decodedJson,
       lastError: "",
     };
   });
@@ -194,9 +271,6 @@ async function bootstrap() {
 
 function applyState(snapshot) {
   state.snapshot = snapshot;
-  if (!state.activeDevice && snapshot?.devices?.length) {
-    state.activeDevice = snapshot.devices[0].name;
-  }
   render();
 }
 
@@ -222,6 +296,15 @@ function render() {
 
   elements.errorBanner.textContent = snapshot.lastError || "";
   elements.errorBanner.classList.toggle("hidden", !snapshot.lastError);
+  elements.editorOverlay.classList.toggle("hidden", !state.editorOpen);
+  document.body.classList.toggle("editor-open", state.editorOpen);
+
+  for (const button of elements.tabButtons) {
+    button.classList.toggle("active", button.dataset.tab === state.activeTab);
+  }
+  for (const [tabName, panel] of Object.entries(elements.tabPanels)) {
+    panel.classList.toggle("active", tabName === state.activeTab);
+  }
 
   elements.devicesGrid.innerHTML = (snapshot.devices || [])
     .map((device) => {
@@ -245,10 +328,6 @@ function render() {
             <div><span>Last seen</span><strong>${escapeHTML(device.lastSeen || "n/a")}</strong></div>
           </div>
           <div class="device-block">
-            <h4>Last raw frame</h4>
-            <pre>${escapeHTML(device.lastRawFrame || "Waiting for data...")}</pre>
-          </div>
-          <div class="device-block">
             <h4>Decoded payload</h4>
             ${decodedBlock}
           </div>
@@ -258,7 +337,16 @@ function render() {
     })
     .join("");
 
+  const sourceOptions = buildSourceOptions(snapshot);
+  if (!sourceOptions.some((option) => option.value === state.selectedSource)) {
+    state.selectedSource = "all";
+  }
+  elements.terminalSource.innerHTML = sourceOptions
+    .map((option) => `<option value="${escapeHTML(option.value)}"${option.value === state.selectedSource ? " selected" : ""}>${escapeHTML(option.label)}</option>`)
+    .join("");
+
   const terminalLines = (snapshot.terminalFrames || [])
+    .filter((frame) => matchesSourceFilter(frame, state.selectedSource))
     .slice()
     .reverse()
     .map((frame) => `<div>${escapeHTML(frame.terminalLine || frame.payload || "")}</div>`)
@@ -304,6 +392,44 @@ function prettyFrameJSON(value) {
   } catch {
     return value;
   }
+}
+
+function buildSourceOptions(snapshot) {
+  const options = [{ value: "all", label: "All sources" }];
+  const seen = new Set(["all"]);
+
+  for (const port of snapshot.availableSerialPorts || []) {
+    const value = `serial:${port}`;
+    if (!seen.has(value)) {
+      seen.add(value);
+      options.push({ value, label: `Serial ${port}` });
+    }
+  }
+
+  for (const device of snapshot.devices || []) {
+    const value = `${device.transport}:${device.port}`;
+    if (device.port && !seen.has(value)) {
+      seen.add(value);
+      options.push({ value, label: `${String(device.transport || "").toUpperCase()} ${device.port}` });
+    }
+  }
+
+  for (const frame of snapshot.terminalFrames || []) {
+    const value = `${frame.transport}:${frame.port}`;
+    if (frame.port && !seen.has(value)) {
+      seen.add(value);
+      options.push({ value, label: `${String(frame.transport || "").toUpperCase()} ${frame.port}` });
+    }
+  }
+
+  return options;
+}
+
+function matchesSourceFilter(frame, filterValue) {
+  if (filterValue === "all") {
+    return true;
+  }
+  return `${frame.transport}:${frame.port}` === filterValue;
 }
 
 function escapeHTML(value) {

@@ -10,6 +10,8 @@ export function RefreshSerialPorts():Promise<Array<string>>;
 
 export function SaveConfig(arg1:string):Promise<main.AppState>;
 
+export function SelectConfigFile():Promise<string>;
+
 export function StartAcquisition():Promise<void>;
 
 export function StartDemo():Promise<void>;
