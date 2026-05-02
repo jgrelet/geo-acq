@@ -25,7 +25,7 @@ document.querySelector("#app").innerHTML = `
     <section class="toolbar startup-banner">
       <div class="startup-copy">
         <p class="eyebrow">Config</p>
-        <h1>Application prete a demarrer</h1>
+        <h1>Geo-acq acquistion system</h1>
       </div>
       <div class="hero-status">
         <span id="run-badge" class="badge badge-idle">idle</span>
