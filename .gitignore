@@ -4,6 +4,7 @@ nmea-proto-*
 *.dll
 *.so
 *.dylib
+*.syso
 *.txt
 *.json
 *.log
