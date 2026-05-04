@@ -48,3 +48,55 @@ func TestDecodeNMEACommonSentences(t *testing.T) {
 		})
 	}
 }
+
+func TestDecodeNMEANormalizesVariablePrecisionUTCTime(t *testing.T) {
+	tests := []struct {
+		name         string
+		raw          string
+		sentenceType string
+		timeKey      string
+		want         string
+	}{
+		{
+			name:         "GLL with 2 decimal digits",
+			raw:          "$GPGLL,4824.10757,N,00441.60306,W,112042.00,A,A*73",
+			sentenceType: "GPGLL",
+			timeKey:      "time_utc",
+			want:         "0000-01-01T11:20:42Z",
+		},
+		{
+			name:         "GGA without decimals",
+			raw:          "$GPGGA,112042,4807.038,N,01131.000,E,1,17,0.6,51.6,M,0.0,M,,*4E",
+			sentenceType: "GPGGA",
+			timeKey:      "time_utc",
+			want:         "0000-01-01T11:20:42Z",
+		},
+		{
+			name:         "RMC with 4 decimal digits",
+			raw:          "$GPRMC,112042.1234,A,4824.10757,N,00441.60306,W,0.0,0.0,040526,,,A*60",
+			sentenceType: "GPRMC",
+			timeKey:      "datetime_utc",
+			want:         "2026-05-04T11:20:42.123Z",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			decoded, err := DecodeNMEA(tc.raw)
+			if err != nil {
+				t.Fatalf("DecodeNMEA() error = %v", err)
+			}
+			if decoded.SentenceType != tc.sentenceType {
+				t.Fatalf("sentence type = %q, want %q", decoded.SentenceType, tc.sentenceType)
+			}
+
+			var payload map[string]interface{}
+			if err := json.Unmarshal([]byte(decoded.JSON), &payload); err != nil {
+				t.Fatalf("unmarshal decoded json: %v", err)
+			}
+			if got := payload[tc.timeKey]; got != tc.want {
+				t.Fatalf("%s = %v, want %q", tc.timeKey, got, tc.want)
+			}
+		})
+	}
+}

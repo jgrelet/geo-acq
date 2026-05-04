@@ -11,6 +11,7 @@ nmea-proto-*
 *.sqlite
 *.swp
 
+
 # Test binary, build with `go test -c`
 *.test
 
@@ -34,5 +35,6 @@ build/bin/
 !wails.json
 !frontend/package.json
 !frontend/package-lock.json
+frontend/package.json.md5
 !frontend/wailsjs/runtime/package.json
 !build/windows/info.json

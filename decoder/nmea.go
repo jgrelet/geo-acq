@@ -3,6 +3,7 @@ package decoder
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	nmea "github.com/jgrelet/go-nmea"
@@ -20,6 +21,8 @@ func DecodeNMEA(raw string) (DecodedSentence, error) {
 	if raw == "" {
 		return DecodedSentence{}, fmt.Errorf("empty NMEA sentence")
 	}
+
+	raw = normalizeNMEATimeFields(raw)
 
 	msg, err := nmea.Parse(raw)
 	if err != nil {
@@ -145,4 +148,94 @@ func optionalUint8(value *uint8) interface{} {
 		return nil
 	}
 	return *value
+}
+
+func normalizeNMEATimeFields(raw string) string {
+	star := strings.LastIndexByte(raw, '*')
+	if star <= 0 {
+		return raw
+	}
+
+	body := raw[1:star]
+	parts := strings.Split(body, ",")
+	if len(parts) == 0 {
+		return raw
+	}
+
+	changed := false
+	switch parts[0] {
+	case "GPGGA", "GNGGA":
+		changed = normalizeField(parts, 1) || changed
+	case "GPGLL", "GNGLL":
+		changed = normalizeField(parts, 5) || changed
+	case "GPRMC", "GNRMC":
+		changed = normalizeField(parts, 1) || changed
+	}
+
+	if !changed {
+		return raw
+	}
+
+	payload := strings.Join(parts, ",")
+	return "$" + payload + "*" + checksum(payload)
+}
+
+func normalizeField(parts []string, index int) bool {
+	if index < 0 || index >= len(parts) {
+		return false
+	}
+
+	normalized, ok := normalizeUTCTime(parts[index])
+	if !ok || normalized == parts[index] {
+		return false
+	}
+
+	parts[index] = normalized
+	return true
+}
+
+func normalizeUTCTime(value string) (string, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return value, false
+	}
+
+	base, frac, hasDot := strings.Cut(value, ".")
+	if len(base) != 6 {
+		return value, false
+	}
+	if _, err := strconv.Atoi(base); err != nil {
+		return value, false
+	}
+
+	if !hasDot {
+		return base + ".000", true
+	}
+
+	if frac == "" {
+		return base + ".000", true
+	}
+
+	for _, r := range frac {
+		if r < '0' || r > '9' {
+			return value, false
+		}
+	}
+
+	switch {
+	case len(frac) == 3:
+		return value, true
+	case len(frac) < 3:
+		return base + "." + frac + strings.Repeat("0", 3-len(frac)), true
+	default:
+		return base + "." + frac[:3], true
+	}
+}
+
+func checksum(payload string) string {
+	sum := byte(0)
+	for i := 0; i < len(payload); i++ {
+		sum ^= payload[i]
+	}
+	return strings.ToUpper(fmt.Sprintf("%02x", sum))
 }
