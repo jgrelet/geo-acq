@@ -663,9 +663,14 @@ func formatTerminalFrame(frame FrameEvent) string {
 		sentenceType = "RAW"
 	}
 
+	timestamp := frame.ReceivedAt
+	if parsed, err := time.Parse(time.RFC3339Nano, frame.ReceivedAt); err == nil {
+		timestamp = parsed.UTC().Format("2006-01-02T15:04:05Z")
+	}
+
 	return fmt.Sprintf(
 		"%s | %-12s | %-6s | %-8s | %-5s | %s",
-		frame.ReceivedAt,
+		timestamp,
 		frame.DeviceName,
 		frame.Transport,
 		frame.Port,
