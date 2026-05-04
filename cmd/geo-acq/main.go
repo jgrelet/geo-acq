@@ -83,6 +83,15 @@ func main() {
 				}
 			}
 		}(deviceName, cfg.Devices[deviceName].Device, dev)
+
+		go func(name string, d *devices.Device) {
+			for err := range d.Errors {
+				if err == nil {
+					continue
+				}
+				log.Printf("read %s: %v", name, err)
+			}
+		}(deviceName, dev)
 	}
 	defer func() {
 		for _, dev := range managedDevices {

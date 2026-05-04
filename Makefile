@@ -11,10 +11,14 @@ EXPORT_PKG := ./cmd/export
 BIN_DIR := bin
 DIST_DIR := dist
 GO ?= go
+WAILS_VERSION ?= v2.12.0
+WAILS_PKG ?= github.com/wailsapp/wails/v2/cmd/wails
 ifeq ($(OS),Windows_NT)
 WAILS ?= $(USERPROFILE)/go/bin/wails.exe
+WAILS_BUILD_ARGS :=
 else
 WAILS ?= $(HOME)/go/bin/wails
+WAILS_BUILD_ARGS := $(shell if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists webkit2gtk-4.1 && ! pkg-config --exists webkit2gtk-4.0; then printf "%s" "-tags webkit2_41"; fi)
 endif
 
 PLATFORMS ?= windows/amd64 linux/amd64 linux/arm64 darwin/amd64
@@ -38,7 +42,7 @@ endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help fmt test build build-all build-sim build-sim-sounder build-export build-gui-wails run-gui-wails run cross-build clean copy
+.PHONY: help fmt test build build-all build-sim build-sim-sounder build-export install-wails check-gui-prereqs build-gui-wails run-gui-wails run cross-build clean copy
 
 help:
 	@printf "%s\n" \
@@ -48,6 +52,8 @@ help:
 		"  make build-sim     Build the GPS simulator in $(BIN_DIR)/" \
 		"  make build-sim-sounder Build the echosounder simulator in $(BIN_DIR)/" \
 		"  make build-export  Build the export tool in $(BIN_DIR)/" \
+		"  make install-wails Install the Wails CLI locally if missing" \
+		"  make check-gui-prereqs Check that Wails GUI build tools are installed" \
 		"  make build-gui-wails Build the Wails GUI prototype" \
 		"  make run-gui-wails Start the Wails GUI prototype in dev mode" \
 		"  make test          Run go test ./..." \
@@ -81,11 +87,48 @@ build-export:
 	mkdir -p $(BIN_DIR)
 	$(GOENV) $(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(EXPORT_BIN) $(EXPORT_PKG)
 
-build-gui-wails:
-	$(WAILS) build -clean
+install-wails:
+	@if [ ! -x "$(WAILS)" ]; then \
+		$(GOENV) $(GO) install $(WAILS_PKG)@$(WAILS_VERSION); \
+	fi
 
-run-gui-wails:
-	$(WAILS) dev
+check-gui-prereqs: install-wails
+	@command -v npm >/dev/null 2>&1 || { \
+		printf "%s\n" \
+			"npm was not found in PATH." \
+			"Install Node.js and npm before building the Wails GUI." \
+			"Ubuntu/Debian example: sudo apt install nodejs npm" >&2; \
+		exit 1; \
+	}
+	@if [ "$(OS)" != "Windows_NT" ] && [ "$$(uname -s)" = "Linux" ]; then \
+		command -v pkg-config >/dev/null 2>&1 || { \
+			printf "%s\n" \
+				"pkg-config was not found in PATH." \
+				"Install the Linux GUI development packages before building the Wails GUI." \
+				"Ubuntu 24.04 example: sudo apt install pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev" \
+				"Ubuntu 22.04 example: sudo apt install pkg-config libgtk-3-dev libwebkit2gtk-4.0-dev" >&2; \
+			exit 1; \
+		}; \
+		pkg-config --exists gtk+-3.0 || { \
+			printf "%s\n" \
+				"gtk+-3.0 development files were not found." \
+				"Ubuntu/Debian example: sudo apt install libgtk-3-dev" >&2; \
+			exit 1; \
+		}; \
+		(pkg-config --exists webkit2gtk-4.0 || pkg-config --exists webkit2gtk-4.1) || { \
+			printf "%s\n" \
+				"Neither webkit2gtk-4.0 nor webkit2gtk-4.1 development files were found." \
+				"Ubuntu 24.04 example: sudo apt install libwebkit2gtk-4.1-dev" \
+				"Ubuntu 22.04 example: sudo apt install libwebkit2gtk-4.0-dev" >&2; \
+			exit 1; \
+		}; \
+	fi
+
+build-gui-wails: check-gui-prereqs
+	$(WAILS) build -clean $(WAILS_BUILD_ARGS)
+
+run-gui-wails: check-gui-prereqs
+	$(WAILS) dev $(WAILS_BUILD_ARGS)
 
 run: build
 	./$(BIN_DIR)/$(APP_BIN)

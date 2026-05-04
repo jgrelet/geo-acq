@@ -12,6 +12,17 @@ vars:
   EXPORT_PKG: ./cmd/export
   BIN_DIR: bin
   DIST_DIR: dist
+  WAILS_VERSION: v2.12.0
+  WAILS_PKG: github.com/wailsapp/wails/v2/cmd/wails
+  WAILS_BUILD_ARGS:
+    sh: |
+      if [ "{{OS}}" = "linux" ] && command -v pkg-config >/dev/null 2>&1; then
+        if pkg-config --exists webkit2gtk-4.1 && ! pkg-config --exists webkit2gtk-4.0; then
+          printf "%s" "-tags webkit2_41"
+          exit 0
+        fi
+      fi
+      printf ""
   WAILS_BIN:
     sh: |
       if [ "{{OS}}" = "windows" ]; then
@@ -74,6 +85,8 @@ tasks:
           "  task build-sim      Build the GPS simulator in {{.BIN_DIR}}/" \
           "  task build-sim-sounder Build the echosounder simulator in {{.BIN_DIR}}/" \
           "  task build-export   Build the export tool in {{.BIN_DIR}}/" \
+          "  task install-wails  Install the Wails CLI locally if missing" \
+          "  task check-gui-prereqs Check that Wails GUI build tools are installed" \
           "  task build-gui-wails Build the Wails GUI prototype" \
           "  task run-gui-wails  Start the Wails GUI prototype in dev mode" \
           "  task test           Run go test ./..." \
@@ -121,15 +134,62 @@ tasks:
       - mkdir -p {{.BIN_DIR}}
       - go build -ldflags "{{.LDFLAGS}}" -o {{.BIN_DIR}}/{{.EXPORT_BIN}} {{.EXPORT_PKG}}
 
+  install-wails:
+    desc: Install the Wails CLI locally if missing
+    cmds:
+      - |
+        if [ ! -x "{{.WAILS_BIN}}" ]; then
+          go install {{.WAILS_PKG}}@{{.WAILS_VERSION}}
+        fi
+
+  check-gui-prereqs:
+    desc: Check that Wails GUI build tools are installed
+    deps: [install-wails]
+    cmds:
+      - |
+        if ! command -v npm >/dev/null 2>&1; then
+          printf "%s\n" \
+            "npm was not found in PATH." \
+            "Install Node.js and npm before building the Wails GUI." \
+            "Ubuntu/Debian example: sudo apt install nodejs npm" >&2
+          exit 1
+        fi
+      - |
+        if [ "{{OS}}" = "linux" ]; then
+          if ! command -v pkg-config >/dev/null 2>&1; then
+            printf "%s\n" \
+              "pkg-config was not found in PATH." \
+              "Install the Linux GUI development packages before building the Wails GUI." \
+              "Ubuntu 24.04 example: sudo apt install pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev" \
+              "Ubuntu 22.04 example: sudo apt install pkg-config libgtk-3-dev libwebkit2gtk-4.0-dev" >&2
+            exit 1
+          fi
+          if ! pkg-config --exists gtk+-3.0; then
+            printf "%s\n" \
+              "gtk+-3.0 development files were not found." \
+              "Ubuntu/Debian example: sudo apt install libgtk-3-dev" >&2
+            exit 1
+          fi
+          if ! pkg-config --exists webkit2gtk-4.0 && ! pkg-config --exists webkit2gtk-4.1; then
+            printf "%s\n" \
+              "Neither webkit2gtk-4.0 nor webkit2gtk-4.1 development files were found." \
+              "Ubuntu 24.04 example: sudo apt install libwebkit2gtk-4.1-dev" \
+              "Ubuntu 22.04 example: sudo apt install libwebkit2gtk-4.0-dev" >&2
+            exit 1
+          fi
+        fi
+
   build-gui-wails:
     desc: Build the Wails GUI prototype
+    deps: [check-gui-prereqs]
     cmds:
-      - '"{{.WAILS_BIN}}" build -clean'
+      - '"{{.WAILS_BIN}}" build -clean {{.WAILS_BUILD_ARGS}}'
 
   run-gui-wails:
     desc: Run the Wails GUI prototype in dev mode
+    deps: [check-gui-prereqs]
     cmds:
-      - '"{{.WAILS_BIN}}" dev'
+      - '"{{.WAILS_BIN}}" dev {{.WAILS_BUILD_ARGS}}'
 
   run:
     desc: Build and run the main application

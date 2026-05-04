@@ -2,13 +2,18 @@ package devices
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"os"
+	"path/filepath"
+	"runtime"
+	"sort"
 	"strings"
+	"syscall"
 
 	"github.com/jgrelet/geo-acq/config"
 	"go.bug.st/serial.v1"
@@ -37,6 +42,7 @@ type Device struct {
 	logger   *log.Logger
 	verbose  bool
 	Data     chan string
+	Errors   chan error
 	initErr  error
 }
 
@@ -53,6 +59,7 @@ func New(name string, args ...interface{}) *Device {
 		logger:  log.New(os.Stdout, fmt.Sprintf("[%s] ", name), log.Ltime),
 		verbose: true,
 		Data:    make(chan string),
+		Errors:  make(chan error, 1),
 	}
 
 	for _, arg := range args {
@@ -102,9 +109,21 @@ func (dev *Device) Connect() error {
 
 	go func() {
 		defer close(dev.Data)
+		defer close(dev.Errors)
+		if dev.typePort == "serial" {
+			dev.streamSerial()
+			return
+		}
 		for {
 			sentence, err := dev.Read()
 			if err != nil {
+				if isTransientReadError(err) {
+					continue
+				}
+				select {
+				case dev.Errors <- err:
+				default:
+				}
 				return
 			}
 			if sentence == "" {
@@ -115,6 +134,46 @@ func (dev *Device) Connect() error {
 	}()
 
 	return nil
+}
+
+func (dev *Device) streamSerial() {
+	if dev.conn == nil {
+		select {
+		case dev.Errors <- errors.New("device is not connected"):
+		default:
+		}
+		return
+	}
+
+	buf := make([]byte, 256)
+	pending := make([]byte, 0, 1024)
+
+	for {
+		n, err := dev.conn.Read(buf)
+		if err != nil {
+			if isTransientReadError(err) {
+				continue
+			}
+			select {
+			case dev.Errors <- err:
+			default:
+			}
+			return
+		}
+		if n <= 0 {
+			continue
+		}
+
+		pending = append(pending, buf[:n]...)
+		sentences, rest := extractNMEASentences(pending)
+		pending = rest
+		for _, sentence := range sentences {
+			if sentence == "" {
+				continue
+			}
+			dev.Data <- sentence
+		}
+	}
 }
 
 // Disconnect closes the io connection to the device.
@@ -140,21 +199,79 @@ func (dev *Device) Write(sentence string) error {
 	return err
 }
 
-// Read reads a NMEA sentence terminated by LF and trims CRLF.
+// Read reads a NMEA sentence terminated by CR, LF, or CRLF.
 func (dev *Device) Read() (string, error) {
 	if dev.reader == nil {
 		return "", errors.New("device is not connected")
 	}
 
-	line, err := dev.reader.ReadString('\n')
-	if err != nil {
-		if errors.Is(err, io.EOF) && len(line) > 0 {
-			return strings.TrimRight(line, "\r\n"), nil
+	var buf []byte
+	for {
+		b, err := dev.reader.ReadByte()
+		if err != nil {
+			if errors.Is(err, io.EOF) && len(buf) > 0 {
+				return normalizeSerialLine(string(buf)), nil
+			}
+			return "", err
 		}
-		return "", err
+
+		switch b {
+		case '\r', '\n':
+			if len(buf) == 0 {
+				continue
+			}
+			return normalizeSerialLine(string(buf)), nil
+		default:
+			buf = append(buf, b)
+		}
+	}
+}
+
+func isTransientReadError(err error) bool {
+	return errors.Is(err, syscall.EINTR)
+}
+
+func extractNMEASentences(data []byte) ([]string, []byte) {
+	var out []string
+
+	for {
+		start := bytes.IndexByte(data, '$')
+		if start < 0 {
+			return out, nil
+		}
+		data = data[start:]
+
+		end := bytes.IndexAny(data, "\r\n")
+		if end < 0 {
+			return out, append([]byte(nil), data...)
+		}
+
+		line := normalizeSerialLine(string(data[:end]))
+		if line != "" {
+			out = append(out, line)
+		}
+
+		next := end
+		for next < len(data) && (data[next] == '\r' || data[next] == '\n') {
+			next++
+		}
+		data = data[next:]
+	}
+}
+
+func normalizeSerialLine(line string) string {
+	line = strings.TrimRight(line, "\r\n")
+	if line == "" {
+		return ""
 	}
 
-	return strings.TrimRight(line, "\r\n"), nil
+	// When the serial port is opened mid-stream, the first read can start in the
+	// middle of a sentence. If we can find a NMEA sentence start marker, resync on it.
+	if idx := strings.IndexByte(line, '$'); idx > 0 {
+		return line[idx:]
+	}
+
+	return line
 }
 
 func (dev *Device) applyConfig(cfg config.Config) {
@@ -273,13 +390,72 @@ func serialStopBits(value int) (serial.StopBits, error) {
 // SerialGetInfo retrieves the port list.
 func SerialGetInfo() ([]string, error) {
 	ports, err := serial.GetPortsList()
+
+	fallback := discoverSerialPortsFallback()
 	if err != nil {
+		if len(fallback) > 0 {
+			return fallback, nil
+		}
 		return nil, err
 	}
-	if len(ports) == 0 {
+
+	merged := mergePortLists(ports, fallback)
+	if len(merged) == 0 {
 		return nil, nil
 	}
-	return ports, nil
+	return merged, nil
+}
+
+func discoverSerialPortsFallback() []string {
+	if runtime.GOOS != "linux" {
+		return nil
+	}
+
+	patterns := []string{
+		"/dev/ttyUSB*",
+		"/dev/ttyACM*",
+		"/dev/ttyAMA*",
+		"/dev/ttyS*",
+		"/dev/rfcomm*",
+	}
+
+	var ports []string
+	for _, pattern := range patterns {
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			continue
+		}
+		ports = append(ports, matches...)
+	}
+
+	sort.Strings(ports)
+	return dedupeStrings(ports)
+}
+
+func mergePortLists(primary []string, secondary []string) []string {
+	merged := append([]string(nil), primary...)
+	merged = append(merged, secondary...)
+	sort.Strings(merged)
+	return dedupeStrings(merged)
+}
+
+func dedupeStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	out := values[:0]
+	var last string
+	for i, value := range values {
+		if value == "" {
+			continue
+		}
+		if i == 0 || value != last {
+			out = append(out, value)
+			last = value
+		}
+	}
+	return out
 }
 
 type udpConn struct {

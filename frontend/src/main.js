@@ -311,6 +311,9 @@ function render() {
       const decodedBlock = device.decodedJson
         ? `<pre>${escapeHTML(prettyFrameJSON(device.decodedJson))}</pre>`
         : `<p class="muted">No decoded payload yet.</p>`;
+      const rawFrameBlock = device.lastRawFrame
+        ? `<pre>${escapeHTML(device.lastRawFrame)}</pre>`
+        : `<p class="muted">No raw frame yet.</p>`;
       return `
         <article class="device-panel">
           <div class="device-top">
@@ -330,6 +333,10 @@ function render() {
           <div class="device-block">
             <h4>Decoded payload</h4>
             ${decodedBlock}
+          </div>
+          <div class="device-block">
+            <h4>Last raw frame</h4>
+            ${rawFrameBlock}
           </div>
           ${device.lastError ? `<p class="device-error">${escapeHTML(device.lastError)}</p>` : ""}
         </article>

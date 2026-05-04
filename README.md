@@ -30,6 +30,8 @@ The project currently supports:
 - Go 1.19 or newer
 - GNU Make if you want to use the `Makefile`
 - [Task](https://taskfile.dev/) if you want to use `Taskfile.yml`
+- Node.js and `npm` for the Wails GUI frontend build
+- On Linux, `pkg-config`, GTK 3, and WebKitGTK development packages for the Wails GUI build
 
 On Windows, Git Bash works well with the current `Makefile` and `Taskfile`.
 
@@ -44,6 +46,8 @@ task build
 task build-sim
 task build-sim-sounder
 task build-export
+task install-wails
+task check-gui-prereqs
 task build-gui-wails
 ```
 
@@ -55,6 +59,8 @@ make test
 make build
 make build-sim
 make build-export
+make install-wails
+make check-gui-prereqs
 make build-gui-wails
 make cross-build
 ```
@@ -84,14 +90,26 @@ What it currently provides:
 Build the desktop binary:
 
 ```bash
+task install-wails
 task build-gui-wails
 ```
 
 or:
 
 ```bash
+make install-wails
 make build-gui-wails
 ```
+
+Notes:
+
+- `task test` / `make test` now work on a fresh clone even if the Wails frontend has not been built yet.
+- the Wails CLI is installed automatically by `build-gui-wails` and `run-gui-wails` if it is missing from `$HOME/go/bin`
+- `npm` must be available in `PATH` because Wails installs frontend dependencies and builds the Vite bundle during GUI build/dev
+- on Ubuntu/Debian, a simple starting point is `sudo apt install nodejs npm`
+- on Ubuntu 24.04/Noble, Wails needs `sudo apt install pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev`
+- on Ubuntu 22.04/Jammy, Wails needs `sudo apt install pkg-config libgtk-3-dev libwebkit2gtk-4.0-dev`
+- on Ubuntu 24.04/Noble, Wails builds also need the `webkit2_41` build tag; the `task` and `make` targets in this repo now add it automatically when `pkg-config` detects WebKitGTK 4.1
 
 The generated executable is written to `build/bin/geo-acq-gui.exe` on Windows.
 
@@ -217,6 +235,40 @@ The runtime selects a default configuration file from the OS:
 
 - `windows.toml` on Windows
 - `linux.toml` on Linux and macOS
+
+## Linux serial troubleshooting
+
+If a USB serial adapter such as a PL2303 is detected by `lsusb` but the GUI does
+not show decoded frames yet, first validate the raw NMEA stream outside the
+application.
+
+Check that the device node exists and that your user can access it:
+
+```bash
+ls -l /dev/ttyUSB0
+groups
+```
+
+Read raw frames directly from the port with the same settings as the default
+Linux configuration:
+
+```bash
+stty -F /dev/ttyUSB0 4800 cs8 -cstopb -parenb
+timeout 10 cat /dev/ttyUSB0
+```
+
+Expected output is a stream of NMEA sentences such as:
+
+```text
+$GPGGA,...
+$GPGSA,...
+$GPRMC,...
+```
+
+If these commands work but the GUI still shows `RAW`, compare the serial
+settings in [linux.toml](/home/jgrelet/git/go/geo-acq/linux.toml:28) with the
+actual device output and inspect the `Terminal raw frames` tab for malformed or
+partial first sentences.
 
 You can always override it with `-config`:
 

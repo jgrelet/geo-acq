@@ -278,6 +278,7 @@ func (a *App) StartAcquisition() error {
 		transport := cfg.Devices[name].Device
 		port := dev.Port()
 		go a.consumeDevice(ctx, session, name, transport, port, dev.Data)
+		go a.consumeDeviceErrors(ctx, name, dev.Errors)
 	}
 
 	a.mu.Lock()
@@ -394,6 +395,27 @@ func (a *App) consumeDevice(ctx context.Context, session *acquisitionSession, na
 	}
 }
 
+func (a *App) consumeDeviceErrors(ctx context.Context, name string, errCh <-chan error) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case err, ok := <-errCh:
+			if !ok {
+				return
+			}
+			if err == nil {
+				continue
+			}
+			msg := fmt.Sprintf("read %s: %v", name, err)
+			a.setLastError(msg)
+			a.updateDeviceStatus(name, "error", msg)
+			a.emitState()
+			return
+		}
+	}
+}
+
 func (a *App) consumeSimulated(ctx context.Context, session *acquisitionSession, name string, transport string, port string, dataCh <-chan string) {
 	for {
 		select {
@@ -453,7 +475,7 @@ func (a *App) handleFrame(session *acquisitionSession, frame FrameEvent) {
 		panel.LastSentenceType = frame.SentenceType
 		panel.LastRawFrame = frame.Payload
 		panel.DecodedJSON = frame.DecodedJSON
-		panel.LastError = ""
+		panel.LastError = frame.DecodeError
 	}
 	a.terminalFrames = append(a.terminalFrames, frame)
 	if len(a.terminalFrames) > terminalLimit {
