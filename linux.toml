@@ -17,11 +17,13 @@ file           = "geo-acq.sqlite"
 	type           = "nmea"
 	use            = true
 	device         = "serial"
+	sentence       = "GGA,RMC"
 
 	[devices.echosounder]
 	type           = "nmea"
 	use            = false
 	device         = "serial"
+	sentence       = "DBT"
 
 [serials]
 

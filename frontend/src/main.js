@@ -23,49 +23,50 @@ const state = {
 document.querySelector("#app").innerHTML = `
   <div class="shell">
     <section class="toolbar startup-banner">
-      <div class="startup-copy">
-        <p class="eyebrow">Config</p>
-        <h1>Geo-acq acquistion system</h1>
+      <div class="monitoring-bar">
+        <p class="eyebrow">Monitoring</p>
+        <div class="tabs-bar monitoring-tabs">
+          <button class="tab-btn active" data-tab="config">Configuration</button>
+          <button class="tab-btn" data-tab="devices">Device panels</button>
+          <button class="tab-btn" data-tab="terminal">Terminal raw frames</button>
+          <button class="tab-btn" data-tab="inputs">Available inputs</button>
+        </div>
       </div>
-      <div class="hero-status">
-        <span id="run-badge" class="badge badge-idle">idle</span>
-        <span id="mode-badge" class="subtle-pill">mode: idle</span>
-      </div>
-    </section>
-
-    <section class="toolbar">
-      <label class="path-input">
-        <span>Config</span>
-        <input id="config-path" type="text" placeholder="windows.toml" />
-      </label>
-      <div class="toolbar-actions">
-        <button id="browse-config" class="btn btn-secondary">Choose file</button>
-        <button id="load-config" class="btn btn-secondary">Load config</button>
-        <button id="edit-config" class="btn btn-secondary">Edit config</button>
-        <button id="refresh-ports" class="btn btn-secondary">Refresh ports</button>
-        <button id="start-live" class="btn btn-primary">Start</button>
-        <button id="start-demo" class="btn btn-highlight">Start demo</button>
-        <button id="stop-session" class="btn btn-danger">Stop</button>
+      <div class="hero-actions">
+        <div class="hero-status">
+          <span id="run-badge" class="badge badge-idle">idle</span>
+          <span id="mode-badge" class="subtle-pill">mode: idle</span>
+        </div>
+        <div class="toolbar-actions">
+          <button id="start-live" class="btn btn-primary">Start</button>
+          <button id="start-demo" class="btn btn-highlight">Start demo</button>
+          <button id="stop-session" class="btn btn-danger">Stop</button>
+        </div>
       </div>
     </section>
 
     <section id="error-banner" class="error-banner hidden"></section>
 
     <section class="tabs-card">
-      <div class="tabs-bar">
-        <button class="tab-btn active" data-tab="config">Current config</button>
-        <button class="tab-btn" data-tab="devices">Device panels</button>
-        <button class="tab-btn" data-tab="terminal">Terminal raw frames</button>
-        <button class="tab-btn" data-tab="inputs">Available inputs</button>
-      </div>
-
       <main class="tabs-content">
         <section class="tab-panel" id="tab-config">
           <section class="card inner-card">
             <div class="card-head">
-              <h2>Current config</h2>
+              <h2>Configuration</h2>
               <p id="mission-summary" class="muted">No config loaded</p>
             </div>
+            <section class="toolbar config-toolbar">
+              <label class="path-input">
+                <span>Config file</span>
+                <input id="config-path" type="text" placeholder="windows.toml" />
+              </label>
+              <div class="toolbar-actions">
+                <button id="browse-config" class="btn btn-secondary">Choose file</button>
+                <button id="load-config" class="btn btn-secondary">Load config</button>
+                <button id="edit-config" class="btn btn-secondary">Edit config</button>
+                <button id="refresh-ports" class="btn btn-secondary">Refresh ports</button>
+              </div>
+            </section>
             <div class="config-metadata" id="config-meta"></div>
             <div id="session-summary" class="summary-block summary-inline"></div>
           </section>
@@ -73,10 +74,6 @@ document.querySelector("#app").innerHTML = `
 
         <section class="tab-panel" id="tab-devices">
           <section class="card inner-card">
-            <div class="card-head">
-              <h2>Device panels</h2>
-              <p class="muted">Etat courant et donnees decodees.</p>
-            </div>
             <div id="devices-grid" class="devices-grid"></div>
           </section>
         </section>
@@ -86,7 +83,7 @@ document.querySelector("#app").innerHTML = `
             <div class="card-head terminal-head">
               <div>
                 <h2>Terminal raw frames</h2>
-                <p class="muted">Dernieres trames recues, utiles pour le diagnostic terrain.</p>
+                <p class="muted">Latest received frames.</p>
               </div>
               <label class="terminal-filter">
                 <span>Source</span>
@@ -101,7 +98,7 @@ document.querySelector("#app").innerHTML = `
           <section class="card inner-card">
             <div class="card-head">
               <h2>Available inputs</h2>
-              <p class="muted">Ports serie detectes et sources exposees par la configuration.</p>
+              <p class="muted">Detected serial ports and sources exposed by the configuration.</p>
             </div>
             <div id="serial-ports" class="chip-list chip-list-wide"></div>
           </section>
@@ -245,13 +242,18 @@ EventsOn("geoacq:frame", (frame) => {
     if (device.name !== frame.deviceName) {
       return device;
     }
+
+    const shouldUseDecodedValues = matchesConfiguredSentence(snapshot, device.name, frame.sentenceType);
+    const configuredSentences = configuredSentenceDisplayForDevice(snapshot, device.name);
     return {
       ...device,
       status: frame.mode === "demo" ? "demo" : "streaming",
       frameCount: (device.frameCount || 0) + 1,
-      lastSeen: frame.receivedAt,
-      lastSentenceType: frame.sentenceType,
-      decodedJson: frame.decodedJson,
+      lastSeen: shouldUseDecodedValues ? frame.receivedAt : device.lastSeen,
+      lastSentenceType: shouldUseDecodedValues ? configuredSentences : device.lastSentenceType,
+      decodedJson: shouldUseDecodedValues
+        ? mergeDecodedValues(device.decodedJson, frame.decodedJson, configuredSentences)
+        : device.decodedJson,
       lastError: "",
     };
   });
@@ -308,12 +310,10 @@ function render() {
 
   elements.devicesGrid.innerHTML = (snapshot.devices || [])
     .map((device) => {
+      const configuredSentences = configuredSentenceDisplayForDevice(snapshot, device.name);
       const decodedBlock = device.decodedJson
-        ? `<pre>${escapeHTML(prettyFrameJSON(device.decodedJson))}</pre>`
-        : `<p class="muted">No decoded payload yet.</p>`;
-      const rawFrameBlock = device.lastRawFrame
-        ? `<pre>${escapeHTML(device.lastRawFrame)}</pre>`
-        : `<p class="muted">No raw frame yet.</p>`;
+        ? renderDecodedFields(device.decodedJson)
+        : `<p class="muted">No decoded values yet.</p>`;
       return `
         <article class="device-panel">
           <div class="device-top">
@@ -327,16 +327,11 @@ function render() {
             <div><span>Type</span><strong>${escapeHTML(device.type || "n/a")}</strong></div>
             <div><span>Enabled</span><strong>${device.enabled ? "yes" : "no"}</strong></div>
             <div><span>Frames</span><strong>${device.frameCount || 0}</strong></div>
-            <div><span>Last sentence</span><strong>${escapeHTML(device.lastSentenceType || "n/a")}</strong></div>
-            <div><span>Last seen</span><strong>${escapeHTML(device.lastSeen || "n/a")}</strong></div>
+            <div><span>Sentences</span><strong>${escapeHTML(configuredSentences || device.lastSentenceType || "n/a")}</strong></div>
           </div>
           <div class="device-block">
-            <h4>Decoded payload</h4>
+            <h4>Decoded values</h4>
             ${decodedBlock}
-          </div>
-          <div class="device-block">
-            <h4>Last raw frame</h4>
-            ${rawFrameBlock}
           </div>
           ${device.lastError ? `<p class="device-error">${escapeHTML(device.lastError)}</p>` : ""}
         </article>
@@ -390,15 +385,79 @@ function formatMission(config) {
   return parts.join(" / ");
 }
 
-function prettyFrameJSON(value) {
+function renderDecodedFields(value) {
   if (!value) {
-    return "";
+    return `<p class="muted">No decoded values yet.</p>`;
   }
+
   try {
-    return JSON.stringify(JSON.parse(value), null, 2);
+    const parsed = JSON.parse(value);
+    const entries = Object.entries(parsed).filter(([key, entryValue]) => {
+      if (key === "sentence_type") {
+        return false;
+      }
+      if (key === "time_utc" && parsed.datetime_utc) {
+        return false;
+      }
+      return entryValue !== null && entryValue !== "";
+    });
+    if (entries.length === 0) {
+      return `<p class="muted">No decoded values yet.</p>`;
+    }
+
+    return `
+      <dl class="decoded-list">
+        ${entries
+          .map(([key, entryValue]) => {
+            const formattedValue = formatDecodedValue(key, entryValue);
+            return `<div class="decoded-entry"><dt>${escapeHTML(formatDecodedLabel(key))}</dt><dd>${escapeHTML(formattedValue)}</dd></div>`;
+          })
+          .join("")}
+      </dl>
+    `;
   } catch {
-    return value;
+    return `<pre>${escapeHTML(value)}</pre>`;
   }
+}
+
+function formatDecodedLabel(key) {
+  return key
+    .replace(/^sentence_type$/i, "sentence")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatDecodedValue(key, value) {
+  if ((key === "latitude" || key === "longitude") && typeof value === "number") {
+    return formatDMS(value, key === "latitude");
+  }
+
+  if (Array.isArray(value)) {
+    return value.join(", ");
+  }
+
+  if (typeof value === "object" && value !== null) {
+    return JSON.stringify(value);
+  }
+
+  return String(value);
+}
+
+function formatDMS(decimal, isLatitude) {
+  const absolute = Math.abs(decimal);
+  const degrees = Math.floor(absolute);
+  const minutesFloat = (absolute - degrees) * 60;
+  const minutes = Math.floor(minutesFloat);
+  const seconds = (minutesFloat - minutes) * 60;
+  const hemisphere = isLatitude
+    ? decimal >= 0
+      ? "N"
+      : "S"
+    : decimal >= 0
+      ? "E"
+      : "W";
+
+  return `${degrees}°${minutes}′${seconds.toFixed(1)}″ ${hemisphere}`;
 }
 
 function buildSourceOptions(snapshot) {
@@ -437,6 +496,92 @@ function matchesSourceFilter(frame, filterValue) {
     return true;
   }
   return `${frame.transport}:${frame.port}` === filterValue;
+}
+
+function matchesConfiguredSentence(snapshot, deviceName, sentenceType) {
+  const deviceConfig = snapshot.config?.deviceConfigs?.find((device) => device.name === deviceName);
+  const expected = configuredSentenceIDs(deviceConfig?.sentence || "");
+  if (expected.length === 0) {
+    return true;
+  }
+
+  const actual = normalizeSentenceID(sentenceType || "");
+  if (!actual) {
+    return false;
+  }
+
+  return expected.includes(actual);
+}
+
+function configuredSentenceDisplayForDevice(snapshot, deviceName) {
+  const deviceConfig = snapshot.config?.deviceConfigs?.find((device) => device.name === deviceName);
+  const ids = configuredSentenceIDs(deviceConfig?.sentence || "");
+  if (ids.length === 0) {
+    return "";
+  }
+
+  return ids.map((id) => `GP${id}`).join(",");
+}
+
+function mergeDecodedValues(existingJson, incomingJson, sentenceDisplay) {
+  const incoming = parseDecodedObject(incomingJson);
+  if (!incoming) {
+    return existingJson;
+  }
+
+  const merged = parseDecodedObject(existingJson) || {};
+  for (const [key, value] of Object.entries(incoming)) {
+    if (key === "sentence_type") {
+      continue;
+    }
+    merged[key] = value;
+  }
+
+  if (sentenceDisplay) {
+    merged.sentence_type = sentenceDisplay;
+  } else if (incoming.sentence_type) {
+    merged.sentence_type = incoming.sentence_type;
+  }
+
+  return JSON.stringify(merged);
+}
+
+function parseDecodedObject(value) {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function configuredSentenceIDs(value) {
+  const seen = new Set();
+  const configured = [];
+
+  for (const part of String(value || "").split(",")) {
+    const normalized = normalizeSentenceID(part);
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    configured.push(normalized);
+  }
+
+  return configured;
+}
+
+function normalizeSentenceID(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (!normalized) {
+    return "";
+  }
+
+  return normalized.length > 3 ? normalized.slice(-3) : normalized;
 }
 
 function escapeHTML(value) {

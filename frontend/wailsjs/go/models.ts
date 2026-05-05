@@ -70,6 +70,7 @@ export namespace main {
 	    enabled: boolean;
 	    transport: string;
 	    port: string;
+	    sentence: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new DeviceConfigView(source);
@@ -82,6 +83,7 @@ export namespace main {
 	        this.enabled = source["enabled"];
 	        this.transport = source["transport"];
 	        this.port = source["port"];
+	        this.sentence = source["sentence"];
 	    }
 	}
 	export class MissionView {

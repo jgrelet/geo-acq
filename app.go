@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
@@ -81,6 +82,7 @@ type DeviceConfigView struct {
 	Enabled   bool   `json:"enabled"`
 	Transport string `json:"transport"`
 	Port      string `json:"port"`
+	Sentence  string `json:"sentence"`
 }
 
 type DevicePanelState struct {
@@ -472,9 +474,12 @@ func (a *App) handleFrame(session *acquisitionSession, frame FrameEvent) {
 		}
 		panel.FrameCount++
 		panel.LastSeen = frame.ReceivedAt
-		panel.LastSentenceType = frame.SentenceType
 		panel.LastRawFrame = frame.Payload
-		panel.DecodedJSON = frame.DecodedJSON
+		if shouldDisplaySentence(a.cfg, frame.DeviceName, frame.SentenceType) {
+			panel.LastSentenceType = configuredSentenceDisplay(a.cfg, frame.DeviceName)
+			panel.LastSeen = frame.ReceivedAt
+			panel.DecodedJSON = mergeDecodedJSON(panel.DecodedJSON, frame.DecodedJSON, panel.LastSentenceType)
+		}
 		panel.LastError = frame.DecodeError
 	}
 	a.terminalFrames = append(a.terminalFrames, frame)
@@ -577,6 +582,7 @@ func (a *App) snapshotConfigLocked() ConfigView {
 			Enabled:   deviceCfg.Use,
 			Transport: deviceCfg.Device,
 			Port:      configuredPort(a.cfg, name, deviceCfg.Device),
+			Sentence:  deviceCfg.Sentence,
 		})
 	}
 
@@ -670,6 +676,130 @@ func enabledDeviceNames(cfg config.Config) []string {
 func hasDevice(cfg config.Config, name string) bool {
 	_, ok := cfg.Devices[name]
 	return ok
+}
+
+func shouldDisplaySentence(cfg config.Config, deviceName string, sentenceType string) bool {
+	deviceCfg, ok := cfg.Devices[deviceName]
+	if !ok {
+		return true
+	}
+
+	expected := configuredSentenceIDs(deviceCfg.Sentence)
+	if len(expected) == 0 {
+		return true
+	}
+
+	actual := normalizeSentenceID(sentenceType)
+	if actual == "" {
+		return false
+	}
+
+	for _, candidate := range expected {
+		if actual == candidate {
+			return true
+		}
+	}
+
+	return false
+}
+
+func configuredSentenceIDs(value string) []string {
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+
+	for _, part := range parts {
+		normalized := normalizeSentenceID(part)
+		if normalized == "" {
+			continue
+		}
+		if _, ok := seen[normalized]; ok {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		out = append(out, normalized)
+	}
+
+	return out
+}
+
+func normalizeSentenceID(value string) string {
+	value = strings.ToUpper(strings.TrimSpace(value))
+	if value == "" {
+		return ""
+	}
+
+	if len(value) > 3 {
+		return value[len(value)-3:]
+	}
+
+	return value
+}
+
+func configuredSentenceDisplay(cfg config.Config, deviceName string) string {
+	deviceCfg, ok := cfg.Devices[deviceName]
+	if !ok {
+		return ""
+	}
+
+	ids := configuredSentenceIDs(deviceCfg.Sentence)
+	if len(ids) == 0 {
+		return ""
+	}
+
+	labels := make([]string, 0, len(ids))
+	for _, id := range ids {
+		labels = append(labels, "GP"+id)
+	}
+
+	return strings.Join(labels, ",")
+}
+
+func mergeDecodedJSON(existingJSON string, incomingJSON string, sentenceDisplay string) string {
+	incoming, ok := decodeJSONObject(incomingJSON)
+	if !ok {
+		return existingJSON
+	}
+
+	merged := make(map[string]interface{}, len(incoming)+1)
+	if existing, ok := decodeJSONObject(existingJSON); ok {
+		for key, value := range existing {
+			merged[key] = value
+		}
+	}
+
+	for key, value := range incoming {
+		if key == "sentence_type" {
+			continue
+		}
+		merged[key] = value
+	}
+
+	if sentenceDisplay != "" {
+		merged["sentence_type"] = sentenceDisplay
+	} else if value, ok := incoming["sentence_type"]; ok {
+		merged["sentence_type"] = value
+	}
+
+	data, err := json.Marshal(merged)
+	if err != nil {
+		return incomingJSON
+	}
+
+	return string(data)
+}
+
+func decodeJSONObject(raw string) (map[string]interface{}, bool) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, false
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return nil, false
+	}
+
+	return payload, true
 }
 
 func isEnabled(a *App, name string) bool {

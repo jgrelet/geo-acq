@@ -1,6 +1,6 @@
 [mission]
-name           = "test"
-pi             = "jgrelet"
+name           = "Test"
+pi             = "J.Grelet"
 organization   = "IRD"
 
 [global]
@@ -17,11 +17,13 @@ file           = "geo-acq.sqlite"
 	type           = "nmea"
 	use            = true
 	device         = "serial"
+	sentence       = "GGA,RMC"
 
 	[devices.echosounder]
 	type           = "nmea"
 	use            = false
 	device         = "serial"
+	sentence       = "DBT"
 
 [serials]
 
@@ -48,6 +50,4 @@ file           = "geo-acq.sqlite"
 	[udp.echosounder]
 	host           = ""
 	port           = "10184"
-
-
 

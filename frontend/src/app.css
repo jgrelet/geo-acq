@@ -25,6 +25,21 @@
   align-items: center;
 }
 
+.hero-actions {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.monitoring-bar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+}
+
 .badge,
 .subtle-pill,
 .status-pill,
@@ -176,6 +191,11 @@
   margin-bottom: 16px;
 }
 
+.monitoring-tabs {
+  flex-wrap: nowrap;
+  margin-bottom: 0;
+}
+
 .tab-btn {
   padding: 10px 16px;
 }
@@ -247,6 +267,10 @@
   margin: 0 20px 20px;
 }
 
+.config-toolbar {
+  margin: 0 20px 12px;
+}
+
 #config-editor {
   min-height: 70vh;
   padding: 18px;
@@ -293,6 +317,35 @@
 .device-block h4 {
   margin: 0 0 8px;
   color: #8dd8fb;
+}
+
+.decoded-list {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.decoded-entry {
+  display: grid;
+  grid-template-columns: minmax(120px, 180px) 1fr;
+  gap: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+}
+
+.decoded-entry dt,
+.decoded-entry dd {
+  margin: 0;
+}
+
+.decoded-entry dt {
+  color: #7db4d6;
+}
+
+.decoded-entry dd {
+  font-weight: 600;
+  word-break: break-word;
 }
 
 .device-block pre,
@@ -406,6 +459,8 @@ body.editor-open {
   }
 
   .terminal-head,
+  .monitoring-bar,
+  .hero-actions,
   .editor-toolbar,
   .startup-banner {
     align-items: flex-start;

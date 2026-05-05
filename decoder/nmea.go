@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	nmea "github.com/jgrelet/go-nmea"
 )
@@ -32,7 +33,7 @@ func DecodeNMEA(raw string) (DecodedSentence, error) {
 	message := msg.GetMessage()
 	sentenceType := message.Type.GetTypeID().Serialize()
 
-	payload := buildPayload(sentenceType, msg)
+	payload := buildPayload(raw, sentenceType, msg)
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return DecodedSentence{}, fmt.Errorf("marshal decoded %s sentence: %w", sentenceType, err)
@@ -44,7 +45,7 @@ func DecodeNMEA(raw string) (DecodedSentence, error) {
 	}, nil
 }
 
-func buildPayload(sentenceType string, msg nmea.NMEA) interface{} {
+func buildPayload(raw string, sentenceType string, msg nmea.NMEA) interface{} {
 	switch sentence := msg.(type) {
 	case *nmea.GPGGA:
 		return map[string]interface{}{
@@ -61,9 +62,13 @@ func buildPayload(sentenceType string, msg nmea.NMEA) interface{} {
 			"dgps_station_id":    optionalUint8(sentence.DGPSStationID),
 		}
 	case *nmea.GPRMC:
+		datetimeUTC := sentence.DateTimeUTC
+		if parsed, ok := extractRMCDatetime(raw); ok {
+			datetimeUTC = parsed
+		}
 		return map[string]interface{}{
 			"sentence_type":          sentenceType,
-			"datetime_utc":           sentence.DateTimeUTC,
+			"datetime_utc":           datetimeUTC,
 			"is_valid":               bool(sentence.IsValid),
 			"latitude":               float64(sentence.Latitude),
 			"longitude":              float64(sentence.Longitude),
@@ -120,6 +125,42 @@ func buildPayload(sentenceType string, msg nmea.NMEA) interface{} {
 			"fields":        messageFields(msg),
 		}
 	}
+}
+
+func extractRMCDatetime(raw string) (time.Time, bool) {
+	star := strings.LastIndexByte(raw, '*')
+	if star <= 0 || len(raw) < 2 {
+		return time.Time{}, false
+	}
+
+	body := raw[1:star]
+	parts := strings.Split(body, ",")
+	if len(parts) < 10 {
+		return time.Time{}, false
+	}
+
+	sentenceID := strings.TrimSpace(parts[0])
+	if sentenceID != "GPRMC" && sentenceID != "GNRMC" {
+		return time.Time{}, false
+	}
+
+	timeValue := strings.TrimSpace(parts[1])
+	dateValue := strings.TrimSpace(parts[9])
+	if timeValue == "" || dateValue == "" {
+		return time.Time{}, false
+	}
+
+	normalizedTime, ok := normalizeUTCTime(timeValue)
+	if !ok {
+		return time.Time{}, false
+	}
+
+	parsed, err := time.Parse("020106 150405.000", dateValue+" "+normalizedTime)
+	if err != nil {
+		return time.Time{}, false
+	}
+
+	return parsed, true
 }
 
 func messageFields(msg nmea.NMEA) []string {

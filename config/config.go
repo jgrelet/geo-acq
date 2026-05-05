@@ -27,6 +27,7 @@ type Device struct {
 	Type   string
 	Use    bool
 	Device string
+	Sentence string
 }
 
 // Mission describes the current acquisition campaign metadata.
