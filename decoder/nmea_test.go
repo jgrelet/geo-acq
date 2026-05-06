@@ -26,6 +26,11 @@ func TestDecodeNMEACommonSentences(t *testing.T) {
 			raw:          "$GPDBT,108.34,f,33.02,M,18.06,F*35",
 			sentenceType: "GPDBT",
 		},
+		{
+			name:         "ZDA",
+			raw:          "$GPZDA,201530.00,04,07,2002,00,00*60",
+			sentenceType: "GPZDA",
+		},
 	}
 
 	for _, tc := range tests {
@@ -77,6 +82,20 @@ func TestDecodeNMEANormalizesVariablePrecisionUTCTime(t *testing.T) {
 			sentenceType: "GPRMC",
 			timeKey:      "datetime_utc",
 			want:         "2026-05-04T11:20:42.123Z",
+		},
+		{
+			name:         "RMC with empty course field",
+			raw:          "$GPRMC,070632.00,A,4824.11143,N,00441.59822,W,0.805,,060526,,,A*61",
+			sentenceType: "GPRMC",
+			timeKey:      "datetime_utc",
+			want:         "2026-05-06T07:06:32Z",
+		},
+		{
+			name:         "ZDA with full date",
+			raw:          "$GPZDA,201530.00,04,07,2002,00,00*60",
+			sentenceType: "GPZDA",
+			timeKey:      "datetime_utc",
+			want:         "2002-07-04T20:15:30Z",
 		},
 	}
 

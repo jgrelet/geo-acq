@@ -291,6 +291,16 @@
   padding: 16px;
 }
 
+.device-panel-toggle {
+  cursor: pointer;
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.device-panel-toggle:hover {
+  border-color: rgba(141, 216, 251, 0.34);
+  transform: translateY(-1px);
+}
+
 .device-top {
   display: flex;
   justify-content: space-between;

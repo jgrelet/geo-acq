@@ -29,3 +29,7 @@ export function StartAcquisition() {
 export function StopAcquisition() {
   return window['go']['main']['App']['StopAcquisition']();
 }
+
+export function ToggleDeviceSimulation(arg1) {
+  return window['go']['main']['App']['ToggleDeviceSimulation'](arg1);
+}

@@ -12,7 +12,7 @@ import (
 
 const earthRadiusMeters = 6371000.0
 
-// NewGps simulates GGA and VTG sentences every interval.
+// NewGps simulates GGA, RMC, ZDA and VTG sentences every interval.
 func NewGps(interval time.Duration, sog, cog float64) <-chan string {
 	out := make(chan string)
 	ticker := time.NewTicker(time.Second * interval)
@@ -25,14 +25,20 @@ func NewGps(interval time.Duration, sog, cog float64) <-chan string {
 	if err != nil {
 		panic(fmt.Sprintf("unable to decode vtg sentence: %v", err))
 	}
+	sentenceRMC, err := nmea.Parse("$GPRMC,015540.000,A,4807.038,N,01131.000,E,0.0,0.0,040526,,,A*6C")
+	if err != nil {
+		panic(fmt.Sprintf("unable to decode rmc sentence: %v", err))
+	}
 
 	gpgga := sentenceGGA.(*nmea.GPGGA)
 	gpvtg := sentenceVTG.(*nmea.GPVTG)
+	gprmc := sentenceRMC.(*nmea.GPRMC)
 
 	go func() {
 		defer ticker.Stop()
 		for range ticker.C {
-			gpgga.TimeUTC = time.Now().UTC()
+			nowUTC := time.Now().UTC()
+			gpgga.TimeUTC = nowUTC
 			latitude, longitude := computeNextPosition(
 				float64(gpgga.Latitude),
 				float64(gpgga.Longitude),
@@ -42,6 +48,16 @@ func NewGps(interval time.Duration, sog, cog float64) <-chan string {
 			gpgga.Latitude = nmea.LatLong(latitude)
 			gpgga.Longitude = nmea.LatLong(longitude)
 			out <- gpgga.Serialize()
+
+			gprmc.DateTimeUTC = nowUTC
+			gprmc.IsValid = true
+			gprmc.Latitude = gpgga.Latitude
+			gprmc.Longitude = gpgga.Longitude
+			gprmc.Speed = sog
+			gprmc.COG = normalizeHeading(cog)
+			out <- gprmc.Serialize()
+
+			out <- buildZDASentence(nowUTC)
 
 			gpvtg.COG = normalizeHeading(cog)
 			gpvtg.SpeedKnots = sog
@@ -92,4 +108,25 @@ func normalizeLongitude(lon float64) float64 {
 		lon += 360.0
 	}
 	return lon
+}
+
+func buildZDASentence(now time.Time) string {
+	payload := fmt.Sprintf(
+		"GPZDA,%02d%02d%02d.000,%02d,%02d,%04d,00,00",
+		now.UTC().Hour(),
+		now.UTC().Minute(),
+		now.UTC().Second(),
+		now.UTC().Day(),
+		int(now.UTC().Month()),
+		now.UTC().Year(),
+	)
+	return "$" + payload + "*" + checksum(payload)
+}
+
+func checksum(payload string) string {
+	sum := byte(0)
+	for i := 0; i < len(payload); i++ {
+		sum ^= payload[i]
+	}
+	return fmt.Sprintf("%02X", sum)
 }

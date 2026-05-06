@@ -10,6 +10,7 @@ import {
   SelectConfigFile,
   StartAcquisition,
   StopAcquisition,
+  ToggleDeviceSimulation,
 } from "../wailsjs/go/main/App.js";
 
 const state = {
@@ -215,6 +216,23 @@ for (const button of elements.tabButtons) {
   });
 }
 
+elements.devicesGrid.addEventListener("click", async (event) => {
+  const card = event.target.closest("[data-device-toggle]");
+  if (!card || state.snapshot?.running) {
+    return;
+  }
+
+  const { deviceToggle, deviceMode } = card.dataset;
+  if (deviceMode !== "disabled" && deviceMode !== "simulate") {
+    return;
+  }
+
+  await safely(async () => {
+    const snapshot = await ToggleDeviceSimulation(deviceToggle);
+    applyState(snapshot);
+  });
+});
+
 EventsOn("geoacq:state", (payload) => {
   if (payload) {
     applyState(payload);
@@ -304,8 +322,9 @@ function render() {
       const decodedBlock = device.decodedJson
         ? renderDecodedFields(device.decodedJson)
         : `<p class="muted">No decoded values yet.</p>`;
+      const canToggleSimulation = !snapshot.running && (device.mode === "disabled" || device.mode === "simulate");
       return `
-        <article class="device-panel">
+        <article class="device-panel${canToggleSimulation ? " device-panel-toggle" : ""}" data-device-toggle="${escapeHTML(device.name)}" data-device-mode="${escapeHTML(device.mode || "")}">
           <div class="device-top">
             <div>
               <h3>${escapeHTML(device.name)}</h3>

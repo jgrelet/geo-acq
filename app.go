@@ -34,6 +34,7 @@ type App struct {
 	cfg            config.Config
 	deviceOrder    []string
 	deviceStates   map[string]*DevicePanelState
+	runtimeModes   map[string]string
 	terminalFrames []FrameEvent
 	serialPorts    []string
 	running        bool
@@ -117,6 +118,7 @@ func NewApp() *App {
 	return &App{
 		mode:         "idle",
 		deviceStates: make(map[string]*DevicePanelState),
+		runtimeModes: make(map[string]string),
 	}
 }
 
@@ -183,6 +185,7 @@ func (a *App) LoadConfig(path string) (AppState, error) {
 	a.cfg = cfg
 	a.deviceOrder = deviceOrder
 	a.deviceStates = deviceStates
+	a.runtimeModes = make(map[string]string)
 	a.serialPorts = serialPorts
 	a.mode = "idle"
 	a.lastError = ""
@@ -212,6 +215,43 @@ func (a *App) SaveConfig(raw string) (AppState, error) {
 	}
 
 	return a.LoadConfig(path)
+}
+
+func (a *App) ToggleDeviceSimulation(name string) (AppState, error) {
+	if a.isRunning() {
+		return a.GetState(), fmt.Errorf("stop the current session before changing device mode")
+	}
+
+	a.mu.Lock()
+	state, ok := a.deviceStates[name]
+	if !ok {
+		a.mu.Unlock()
+		return a.GetState(), fmt.Errorf("unknown device %s", name)
+	}
+
+	currentMode := a.effectiveDeviceModeLocked(name)
+	switch currentMode {
+	case "disabled":
+		a.runtimeModes[name] = "simulate"
+		state.Mode = "simulate"
+	case "simulate":
+		delete(a.runtimeModes, name)
+		state.Mode = configModeOrDisabled(a.cfg, name)
+	default:
+		return a.GetState(), nil
+	}
+
+	state.Transport = displayTransportForMode(a.cfg.Devices[name], state.Mode)
+	state.Status = defaultStatus(state.Mode)
+	state.FrameCount = 0
+	state.LastSeen = ""
+	state.LastSentenceType = ""
+	state.LastRawFrame = ""
+	state.DecodedJSON = ""
+		state.LastError = ""
+
+	a.mu.Unlock()
+	return a.GetState(), nil
 }
 
 func (a *App) SelectConfigFile() (string, error) {
@@ -248,7 +288,7 @@ func (a *App) StartAcquisition() error {
 		return fmt.Errorf("a session is already running")
 	}
 
-	deviceNames := activeDeviceNames(cfg)
+	deviceNames := a.activeDeviceNamesLocked()
 	if len(deviceNames) == 0 {
 		return a.fail(fmt.Errorf("no active devices found in configuration"))
 	}
@@ -260,14 +300,14 @@ func (a *App) StartAcquisition() error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	session := &acquisitionSession{
-		mode:   sessionMode(cfg),
+		mode:   a.sessionModeLocked(),
 		cancel: cancel,
 		done:   make(chan struct{}),
 		store:  store,
 	}
 
 	for _, name := range deviceNames {
-		switch cfg.Devices[name].NormalizedMode() {
+		switch a.effectiveDeviceModeLocked(name) {
 		case "simulate":
 			dataCh, err := simulatedData(name)
 			if err != nil {
@@ -553,7 +593,7 @@ func (a *App) snapshotConfigLocked() ConfigView {
 		devicesCfg = append(devicesCfg, DeviceConfigView{
 			Name:      name,
 			Type:      deviceCfg.Type,
-			Mode:      deviceCfg.NormalizedMode(),
+			Mode:      a.effectiveDeviceModeLocked(name),
 			Transport: deviceCfg.Device,
 			Port:      configuredPort(a.cfg, name, deviceCfg.Device),
 			Sentence:  deviceCfg.Sentence,
@@ -591,7 +631,7 @@ func buildDeviceStates(cfg config.Config, names []string) map[string]*DevicePane
 		out[name] = &DevicePanelState{
 			Name:      name,
 			Type:      deviceCfg.Type,
-			Transport: displayTransport(deviceCfg),
+			Transport: displayTransportForMode(deviceCfg, deviceCfg.NormalizedMode()),
 			Port:      configuredPort(cfg, name, deviceCfg.Device),
 			Mode:      deviceCfg.NormalizedMode(),
 			Status:    defaultStatus(deviceCfg.NormalizedMode()),
@@ -611,8 +651,8 @@ func defaultStatus(mode string) string {
 	}
 }
 
-func displayTransport(deviceCfg config.Device) string {
-	if deviceCfg.NormalizedMode() == "simulate" {
+func displayTransportForMode(deviceCfg config.Device, mode string) string {
+	if mode == "simulate" {
 		return "simulate"
 	}
 	return deviceCfg.Device
@@ -652,6 +692,16 @@ func activeDeviceNames(cfg config.Config) []string {
 	names := make([]string, 0, len(cfg.Devices))
 	for _, name := range sortedDeviceNames(cfg) {
 		if cfg.Devices[name].NormalizedMode() != "disabled" {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+func (a *App) activeDeviceNamesLocked() []string {
+	names := make([]string, 0, len(a.cfg.Devices))
+	for _, name := range sortedDeviceNames(a.cfg) {
+		if a.effectiveDeviceModeLocked(name) != "disabled" {
 			names = append(names, name)
 		}
 	}
@@ -807,6 +857,43 @@ func sessionMode(cfg config.Config) string {
 	default:
 		return "live"
 	}
+}
+
+func (a *App) sessionModeLocked() string {
+	hasReady := false
+	hasSimulate := false
+	for _, name := range sortedDeviceNames(a.cfg) {
+		switch a.effectiveDeviceModeLocked(name) {
+		case "ready":
+			hasReady = true
+		case "simulate":
+			hasSimulate = true
+		}
+	}
+
+	switch {
+	case hasReady && hasSimulate:
+		return "mixed"
+	case hasSimulate:
+		return "simulate"
+	default:
+		return "live"
+	}
+}
+
+func (a *App) effectiveDeviceModeLocked(name string) string {
+	if mode, ok := a.runtimeModes[name]; ok && mode != "" {
+		return mode
+	}
+	return configModeOrDisabled(a.cfg, name)
+}
+
+func configModeOrDisabled(cfg config.Config, name string) string {
+	deviceCfg, ok := cfg.Devices[name]
+	if !ok {
+		return "disabled"
+	}
+	return deviceCfg.NormalizedMode()
 }
 
 func simulatedData(name string) (<-chan string, error) {

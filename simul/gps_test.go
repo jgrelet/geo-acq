@@ -2,6 +2,7 @@ package simul
 
 import (
 	"math"
+	"strings"
 	"testing"
 	"time"
 )
@@ -34,5 +35,37 @@ func TestNewGpsEmitsSentences(t *testing.T) {
 		}
 	case <-time.After(1500 * time.Millisecond):
 		t.Fatal("timeout waiting for gps sentence")
+	}
+}
+
+func TestNewGpsEmitsRMC(t *testing.T) {
+	ch := NewGps(1, 10, 90)
+
+	timeout := time.After(4 * time.Second)
+	for {
+		select {
+		case sentence := <-ch:
+			if strings.HasPrefix(sentence, "$GPRMC,") {
+				return
+			}
+		case <-timeout:
+			t.Fatal("timeout waiting for simulated RMC sentence")
+		}
+	}
+}
+
+func TestNewGpsEmitsZDA(t *testing.T) {
+	ch := NewGps(1, 10, 90)
+
+	timeout := time.After(4 * time.Second)
+	for {
+		select {
+		case sentence := <-ch:
+			if strings.HasPrefix(sentence, "$GPZDA,") {
+				return
+			}
+		case <-timeout:
+			t.Fatal("timeout waiting for simulated ZDA sentence")
+		}
 	}
 }

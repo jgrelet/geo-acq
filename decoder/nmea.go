@@ -25,6 +25,10 @@ func DecodeNMEA(raw string) (DecodedSentence, error) {
 
 	raw = normalizeNMEATimeFields(raw)
 
+	if decoded, ok, err := decodeCustomSentence(raw); ok {
+		return decoded, err
+	}
+
 	msg, err := nmea.Parse(raw)
 	if err != nil {
 		return DecodedSentence{}, err
@@ -127,6 +131,44 @@ func buildPayload(raw string, sentenceType string, msg nmea.NMEA) interface{} {
 	}
 }
 
+func decodeCustomSentence(raw string) (DecodedSentence, bool, error) {
+	sentenceType, parts, ok := splitSentence(raw)
+	if !ok {
+		return DecodedSentence{}, false, nil
+	}
+	if !hasValidChecksum(raw) {
+		return DecodedSentence{}, false, nil
+	}
+
+	var payload map[string]interface{}
+	switch {
+	case strings.HasSuffix(sentenceType, "RMC"):
+		parsed, err := buildRMCPayload(sentenceType, parts)
+		if err != nil {
+			return DecodedSentence{}, true, err
+		}
+		payload = parsed
+	case strings.HasSuffix(sentenceType, "ZDA"):
+		parsed, err := buildZDAPayload(sentenceType, parts)
+		if err != nil {
+			return DecodedSentence{}, true, err
+		}
+		payload = parsed
+	default:
+		return DecodedSentence{}, false, nil
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return DecodedSentence{}, true, fmt.Errorf("marshal decoded %s sentence: %w", sentenceType, err)
+	}
+
+	return DecodedSentence{
+		SentenceType: sentenceType,
+		JSON:         string(data),
+	}, true, nil
+}
+
 func extractRMCDatetime(raw string) (time.Time, bool) {
 	star := strings.LastIndexByte(raw, '*')
 	if star <= 0 || len(raw) < 2 {
@@ -161,6 +203,217 @@ func extractRMCDatetime(raw string) (time.Time, bool) {
 	}
 
 	return parsed, true
+}
+
+func buildRMCPayload(sentenceType string, parts []string) (map[string]interface{}, error) {
+	if len(parts) < 10 {
+		return nil, fmt.Errorf("incomplete %s sentence", sentenceType)
+	}
+
+	datetimeUTC, ok := parseRMCDateTime(parts[1], parts[9])
+	if !ok {
+		return nil, fmt.Errorf("invalid %s datetime", sentenceType)
+	}
+
+	latitude, err := parseLatLong(parts, 3, 4)
+	if err != nil {
+		return nil, err
+	}
+	longitude, err := parseLatLong(parts, 5, 6)
+	if err != nil {
+		return nil, err
+	}
+
+	payload := map[string]interface{}{
+		"sentence_type": sentenceType,
+		"datetime_utc":  datetimeUTC,
+		"is_valid":      strings.EqualFold(strings.TrimSpace(fieldAt(parts, 2)), "A"),
+		"latitude":      latitude,
+		"longitude":     longitude,
+	}
+
+	if value, ok := parseOptionalFloat(fieldAt(parts, 7)); ok {
+		payload["speed_knots"] = value
+	}
+	if value, ok := parseOptionalFloat(fieldAt(parts, 8)); ok {
+		payload["course_over_deg"] = value
+	}
+	if value, ok := parseOptionalSignedFloat(fieldAt(parts, 10), fieldAt(parts, 11)); ok {
+		payload["magnetic_variation_deg"] = value
+	}
+	if mode := strings.TrimSpace(fieldAt(parts, 12)); mode != "" {
+		payload["positioning_mode"] = mode
+	}
+
+	return payload, nil
+}
+
+func buildZDAPayload(sentenceType string, parts []string) (map[string]interface{}, error) {
+	if len(parts) < 5 {
+		return nil, fmt.Errorf("incomplete %s sentence", sentenceType)
+	}
+
+	datetimeUTC, ok := parseZDADateTime(fieldAt(parts, 1), fieldAt(parts, 2), fieldAt(parts, 3), fieldAt(parts, 4))
+	if !ok {
+		return nil, fmt.Errorf("invalid %s datetime", sentenceType)
+	}
+
+	payload := map[string]interface{}{
+		"sentence_type": sentenceType,
+		"datetime_utc":  datetimeUTC,
+	}
+
+	if value, ok := parseOptionalInt(fieldAt(parts, 5)); ok {
+		payload["local_zone_hours"] = value
+	}
+	if value, ok := parseOptionalInt(fieldAt(parts, 6)); ok {
+		payload["local_zone_minutes"] = value
+	}
+
+	return payload, nil
+}
+
+func parseRMCDateTime(timeValue string, dateValue string) (time.Time, bool) {
+	normalizedTime, ok := normalizeUTCTime(timeValue)
+	if !ok || strings.TrimSpace(dateValue) == "" {
+		return time.Time{}, false
+	}
+
+	parsed, err := time.Parse("020106 150405.000", strings.TrimSpace(dateValue)+" "+normalizedTime)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return parsed, true
+}
+
+func parseZDADateTime(timeValue string, dayValue string, monthValue string, yearValue string) (time.Time, bool) {
+	normalizedTime, ok := normalizeUTCTime(timeValue)
+	if !ok {
+		return time.Time{}, false
+	}
+
+	day, err := strconv.Atoi(strings.TrimSpace(dayValue))
+	if err != nil {
+		return time.Time{}, false
+	}
+	month, err := strconv.Atoi(strings.TrimSpace(monthValue))
+	if err != nil {
+		return time.Time{}, false
+	}
+	year, err := strconv.Atoi(strings.TrimSpace(yearValue))
+	if err != nil {
+		return time.Time{}, false
+	}
+
+	parsed, err := time.Parse(time.RFC3339Nano, fmt.Sprintf("%04d-%02d-%02dT%sZ", year, month, day, formatClock(normalizedTime)))
+	if err != nil {
+		return time.Time{}, false
+	}
+
+	return parsed, true
+}
+
+func formatClock(normalizedTime string) string {
+	base, frac, _ := strings.Cut(normalizedTime, ".")
+	if len(base) != 6 {
+		return normalizedTime
+	}
+	clock := base[:2] + ":" + base[2:4] + ":" + base[4:6]
+	if frac == "" || frac == "000" {
+		return clock
+	}
+	return clock + "." + frac
+}
+
+func parseLatLong(parts []string, valueIndex int, cardinalIndex int) (float64, error) {
+	value := strings.TrimSpace(fieldAt(parts, valueIndex))
+	cardinal := strings.TrimSpace(fieldAt(parts, cardinalIndex))
+	if value == "" || cardinal == "" {
+		return 0, nil
+	}
+
+	latLong, err := nmea.NewLatLong(value + " " + cardinal)
+	if err != nil {
+		return 0, err
+	}
+
+	return float64(latLong), nil
+}
+
+func parseOptionalFloat(value string) (float64, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, false
+	}
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return 0, false
+	}
+	return parsed, true
+}
+
+func parseOptionalSignedFloat(value string, direction string) (float64, bool) {
+	parsed, ok := parseOptionalFloat(value)
+	if !ok {
+		return 0, false
+	}
+	switch strings.ToUpper(strings.TrimSpace(direction)) {
+	case "W":
+		return -parsed, true
+	case "E", "":
+		return parsed, true
+	default:
+		return parsed, true
+	}
+}
+
+func parseOptionalInt(value string) (int, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, false
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, false
+	}
+	return parsed, true
+}
+
+func splitSentence(raw string) (string, []string, bool) {
+	if len(raw) < 2 || raw[0] != '$' {
+		return "", nil, false
+	}
+	star := strings.LastIndexByte(raw, '*')
+	if star <= 1 {
+		return "", nil, false
+	}
+
+	body := raw[1:star]
+	parts := strings.Split(body, ",")
+	if len(parts) == 0 {
+		return "", nil, false
+	}
+
+	return strings.TrimSpace(parts[0]), parts, true
+}
+
+func hasValidChecksum(raw string) bool {
+	if len(raw) < 4 || raw[0] != '$' {
+		return false
+	}
+	star := strings.LastIndexByte(raw, '*')
+	if star <= 1 || star+3 > len(raw) {
+		return false
+	}
+
+	return strings.EqualFold(raw[star+1:star+3], checksum(raw[1:star]))
+}
+
+func fieldAt(parts []string, index int) string {
+	if index < 0 || index >= len(parts) {
+		return ""
+	}
+	return parts[index]
 }
 
 func messageFields(msg nmea.NMEA) []string {
