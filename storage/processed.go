@@ -164,7 +164,6 @@ func (s *ProcessedSQLiteStore) SaveProcessedFrame(frame ProcessedFrame) error {
 			payload.GeoidSeparationM,
 			payload.DGPSAgeS,
 			payload.DGPSStationID,
-			frame.DecodedJSON,
 		)
 		if err != nil {
 			return fmt.Errorf("insert processed GGA frame: %w", err)
@@ -188,7 +187,6 @@ func (s *ProcessedSQLiteStore) SaveProcessedFrame(frame ProcessedFrame) error {
 			payload.CourseOverDeg,
 			payload.MagneticVariationDeg,
 			payload.PositioningMode,
-			frame.DecodedJSON,
 		)
 		if err != nil {
 			return fmt.Errorf("insert processed RMC frame: %w", err)
@@ -208,7 +206,6 @@ func (s *ProcessedSQLiteStore) SaveProcessedFrame(frame ProcessedFrame) error {
 			payload.SpeedKnots,
 			payload.SpeedKmh,
 			payload.PositioningMode,
-			frame.DecodedJSON,
 		)
 		if err != nil {
 			return fmt.Errorf("insert processed VTG frame: %w", err)
@@ -227,7 +224,6 @@ func (s *ProcessedSQLiteStore) SaveProcessedFrame(frame ProcessedFrame) error {
 			payload.DepthFeet,
 			payload.DepthMeters,
 			payload.DepthFathoms,
-			frame.DecodedJSON,
 		)
 		if err != nil {
 			return fmt.Errorf("insert processed DBT frame: %w", err)
@@ -243,8 +239,8 @@ func (s *ProcessedSQLiteStore) prepareStatements() error {
 		INSERT INTO gga_records (
 			session_id, mission_id, received_at_utc, device_name, transport,
 			time_utc, latitude, longitude, quality_indicator, satellites_used,
-			hdop, altitude_m, geoid_separation_m, dgps_age_s, dgps_station_id, payload_json
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			hdop, altitude_m, geoid_separation_m, dgps_age_s, dgps_station_id
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return fmt.Errorf("prepare gga_records insert: %w", err)
@@ -253,8 +249,8 @@ func (s *ProcessedSQLiteStore) prepareStatements() error {
 		INSERT INTO rmc_records (
 			session_id, mission_id, received_at_utc, device_name, transport,
 			datetime_utc, is_valid, latitude, longitude, speed_knots,
-			course_over_deg, magnetic_variation_deg, positioning_mode, payload_json
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			course_over_deg, magnetic_variation_deg, positioning_mode
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return fmt.Errorf("prepare rmc_records insert: %w", err)
@@ -262,8 +258,8 @@ func (s *ProcessedSQLiteStore) prepareStatements() error {
 	s.insertVTG, err = s.db.Prepare(`
 		INSERT INTO vtg_records (
 			session_id, mission_id, received_at_utc, device_name, transport,
-			course_over_deg, speed_knots, speed_kmh, positioning_mode, payload_json
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			course_over_deg, speed_knots, speed_kmh, positioning_mode
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return fmt.Errorf("prepare vtg_records insert: %w", err)
@@ -271,8 +267,8 @@ func (s *ProcessedSQLiteStore) prepareStatements() error {
 	s.insertDBT, err = s.db.Prepare(`
 		INSERT INTO dbt_records (
 			session_id, mission_id, received_at_utc, device_name, transport,
-			depth_feet, depth_meters, depth_fathoms, payload_json
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			depth_feet, depth_meters, depth_fathoms
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return fmt.Errorf("prepare dbt_records insert: %w", err)
@@ -330,7 +326,6 @@ CREATE TABLE IF NOT EXISTS gga_records (
 	geoid_separation_m REAL,
 	dgps_age_s REAL,
 	dgps_station_id INTEGER,
-	payload_json TEXT NOT NULL,
 	FOREIGN KEY (session_id) REFERENCES acquisition_sessions(id),
 	FOREIGN KEY (mission_id) REFERENCES missions(id)
 );
@@ -350,7 +345,6 @@ CREATE TABLE IF NOT EXISTS rmc_records (
 	course_over_deg REAL,
 	magnetic_variation_deg REAL,
 	positioning_mode TEXT NOT NULL DEFAULT '',
-	payload_json TEXT NOT NULL,
 	FOREIGN KEY (session_id) REFERENCES acquisition_sessions(id),
 	FOREIGN KEY (mission_id) REFERENCES missions(id)
 );
@@ -366,7 +360,6 @@ CREATE TABLE IF NOT EXISTS vtg_records (
 	speed_knots REAL NOT NULL,
 	speed_kmh REAL NOT NULL,
 	positioning_mode TEXT NOT NULL DEFAULT '',
-	payload_json TEXT NOT NULL,
 	FOREIGN KEY (session_id) REFERENCES acquisition_sessions(id),
 	FOREIGN KEY (mission_id) REFERENCES missions(id)
 );
@@ -381,7 +374,6 @@ CREATE TABLE IF NOT EXISTS dbt_records (
 	depth_feet REAL NOT NULL,
 	depth_meters REAL NOT NULL,
 	depth_fathoms REAL NOT NULL,
-	payload_json TEXT NOT NULL,
 	FOREIGN KEY (session_id) REFERENCES acquisition_sessions(id),
 	FOREIGN KEY (mission_id) REFERENCES missions(id)
 );

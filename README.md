@@ -420,7 +420,6 @@ Each processed record keeps:
 - device name
 - transport type
 - decoded fields in typed SQLite columns
-- the normalized decoded JSON payload for traceability
 
 The `log` field is still present in the configuration, but the current runtime mainly writes operational messages to stdout rather than managing a dedicated log file.
 

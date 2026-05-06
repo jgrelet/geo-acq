@@ -56,8 +56,7 @@ func TestOpenProcessedSQLiteAndSaveProcessedFrame(t *testing.T) {
 
 	var datetimeUTC string
 	var isValid bool
-	var payloadJSON string
-	if err := db.QueryRow(`SELECT datetime_utc, is_valid, payload_json FROM rmc_records LIMIT 1`).Scan(&datetimeUTC, &isValid, &payloadJSON); err != nil {
+	if err := db.QueryRow(`SELECT datetime_utc, is_valid FROM rmc_records LIMIT 1`).Scan(&datetimeUTC, &isValid); err != nil {
 		t.Fatalf("query processed frame: %v", err)
 	}
 	if datetimeUTC == "" {
@@ -65,9 +64,6 @@ func TestOpenProcessedSQLiteAndSaveProcessedFrame(t *testing.T) {
 	}
 	if !isValid {
 		t.Fatal("is_valid = false, want true")
-	}
-	if payloadJSON == "" {
-		t.Fatal("payload_json is empty")
 	}
 }
 
