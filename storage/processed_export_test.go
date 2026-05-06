@@ -9,7 +9,7 @@ import (
 	"github.com/jgrelet/geo-acq/decoder"
 )
 
-func TestLoadProcessedForExport(t *testing.T) {
+func TestLoadProcessedRecordsForExport(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "processed.sqlite")
 
 	store, err := OpenProcessedSQLite(dbPath, config.Mission{
@@ -50,7 +50,7 @@ func TestLoadProcessedForExport(t *testing.T) {
 		t.Fatalf("save processed dbt frame: %v", err)
 	}
 
-	session, samples, deviceNames, columns, err := LoadProcessedForExport(dbPath, SessionSelection{
+	session, records, err := LoadProcessedRecordsForExport(dbPath, SessionSelection{
 		MissionName: "mission-1",
 	})
 	if err != nil {
@@ -59,13 +59,13 @@ func TestLoadProcessedForExport(t *testing.T) {
 	if session.Mission != "mission-1" {
 		t.Fatalf("mission = %q, want mission-1", session.Mission)
 	}
-	if len(samples) != 2 {
-		t.Fatalf("sample count = %d, want 2", len(samples))
+	if len(records) != 2 {
+		t.Fatalf("record count = %d, want 2", len(records))
 	}
-	if len(deviceNames) != 2 {
-		t.Fatalf("device count = %d, want 2", len(deviceNames))
+	if records[0].SentenceType == "" {
+		t.Fatal("sentence type should not be empty")
 	}
-	if len(columns) == 0 {
-		t.Fatal("columns should not be empty")
+	if len(records[0].Values) == 0 {
+		t.Fatal("processed values should not be empty")
 	}
 }

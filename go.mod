@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/BurntSushi/toml v1.2.0
 	github.com/jgrelet/go-nmea v0.0.0-20180312131256-18f4a482ff2d
+	github.com/pborman/getopt v1.1.0
 	github.com/wailsapp/wails/v2 v2.12.0
 	go.bug.st/serial.v1 v0.0.0-20191202182710-24a6610f0541
 	modernc.org/sqlite v1.50.0

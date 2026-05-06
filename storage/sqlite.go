@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"time"
 
 	"github.com/jgrelet/geo-acq/config"
@@ -279,61 +278,57 @@ func (s *SQLiteStore) createSession(configFile string) (int64, error) {
 	return sessionID, nil
 }
 
-// LoadFramesForExport loads one acquisition session and its raw frames from SQLite.
-func LoadFramesForExport(path string, selection SessionSelection) (exporter.Session, []exporter.Frame, []string, error) {
+// LoadRawRecordsForExport loads one acquisition session and its raw frames from SQLite.
+func LoadRawRecordsForExport(path string, selection SessionSelection) (exporter.Session, []exporter.RawRecord, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
-		return exporter.Session{}, nil, nil, fmt.Errorf("open sqlite database: %w", err)
+		return exporter.Session{}, nil, fmt.Errorf("open sqlite database: %w", err)
 	}
 	defer db.Close()
 
 	session, err := resolveExportSession(db, selection)
 	if err != nil {
-		return exporter.Session{}, nil, nil, err
+		return exporter.Session{}, nil, err
 	}
 
 	rows, err := db.Query(`
-		SELECT rf.received_at_utc, rf.device_name, rf.payload
+		SELECT rf.received_at_utc, rf.device_name, rf.transport, rf.sentence_type, rf.payload
 		FROM raw_frames rf
 		WHERE rf.session_id = ?
 		ORDER BY rf.received_at_utc, rf.id
 	`, session.ID)
 	if err != nil {
-		return exporter.Session{}, nil, nil, fmt.Errorf("query raw frames: %w", err)
+		return exporter.Session{}, nil, fmt.Errorf("query raw frames: %w", err)
 	}
 	defer rows.Close()
 
-	frames := []exporter.Frame{}
-	deviceSet := map[string]struct{}{}
+	records := []exporter.RawRecord{}
 	for rows.Next() {
 		var receivedAtRaw string
 		var deviceName string
+		var transport string
+		var sentenceType string
 		var payload string
-		if err := rows.Scan(&receivedAtRaw, &deviceName, &payload); err != nil {
-			return exporter.Session{}, nil, nil, fmt.Errorf("scan raw frame: %w", err)
+		if err := rows.Scan(&receivedAtRaw, &deviceName, &transport, &sentenceType, &payload); err != nil {
+			return exporter.Session{}, nil, fmt.Errorf("scan raw frame: %w", err)
 		}
 		receivedAt, err := time.Parse(time.RFC3339Nano, receivedAtRaw)
 		if err != nil {
-			return exporter.Session{}, nil, nil, fmt.Errorf("parse frame timestamp: %w", err)
+			return exporter.Session{}, nil, fmt.Errorf("parse frame timestamp: %w", err)
 		}
-		frames = append(frames, exporter.Frame{
-			ReceivedAt: receivedAt,
-			DeviceName: deviceName,
-			Payload:    payload,
+		records = append(records, exporter.RawRecord{
+			ReceivedAt:   receivedAt,
+			DeviceName:   deviceName,
+			Transport:    transport,
+			SentenceType: sentenceType,
+			Payload:      payload,
 		})
-		deviceSet[deviceName] = struct{}{}
 	}
 	if err := rows.Err(); err != nil {
-		return exporter.Session{}, nil, nil, fmt.Errorf("iterate raw frames: %w", err)
+		return exporter.Session{}, nil, fmt.Errorf("iterate raw frames: %w", err)
 	}
 
-	deviceNames := make([]string, 0, len(deviceSet))
-	for name := range deviceSet {
-		deviceNames = append(deviceNames, name)
-	}
-	sort.Strings(deviceNames)
-
-	return session, frames, deviceNames, nil
+	return session, records, nil
 }
 
 func resolveExportSession(db *sql.DB, selection SessionSelection) (exporter.Session, error) {

@@ -1,126 +1,197 @@
 package main
 
 import (
-	"flag"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
-	"github.com/jgrelet/geo-acq/config"
 	"github.com/jgrelet/geo-acq/exporter"
 	"github.com/jgrelet/geo-acq/storage"
+	"github.com/pborman/getopt"
+)
+
+var (
+	optHelp      = getopt.BoolLong("help", 'h', "display help")
+	optRaw       = getopt.BoolLong("raw", 'r', "export raw SQLite input")
+	optProcessed = getopt.BoolLong("processed", 'p', "export processed SQLite input")
+	optCompact   = getopt.BoolLong("compact", 'c', "write compact processed output")
+	optFull      = getopt.BoolLong("full", 'f', "write full output")
+	optCSV       = getopt.BoolLong("csv", 'C', "write CSV output")
+	optTSV       = getopt.BoolLong("tsv", 'T', "write TSV output")
+	optOutput    = getopt.StringLong("output", 'o', "", "output file", "file")
+	optMission   = getopt.StringLong("mission", 'm', "", "optional mission filter", "name")
+	optSessionID = getopt.Int64Long("session-id", 's', 0, "optional session id", "id")
 )
 
 func main() {
-	configPath := flag.String("config", "examples/export-slowest.toml", "export configuration TOML file")
-	flag.Parse()
+	configureUsage()
+	getopt.Parse()
 
-	cfg, err := config.Load(*configPath)
+	if *optHelp {
+		getopt.Usage()
+		return
+	}
+
+	inputPath := ""
+	if getopt.NArgs() > 0 {
+		inputPath = getopt.Arg(0)
+	}
+	if strings.TrimSpace(inputPath) == "" {
+		log.Fatal("input SQLite file is required")
+	}
+
+	rawSelected, processedSelected, err := resolveSourceMode()
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	databasePath := cfg.Export.Database
-	if databasePath == "" {
-		databasePath = defaultExportDatabasePath(cfg, *configPath)
-	}
-	if databasePath == "" {
-		log.Fatal("export.database must be set or a backup database must be enabled")
-	}
-
-	mode := cfg.Export.Mode
-	if mode == "" {
-		mode = exporter.ModeSlowestDevice
-	}
-
-	interval, err := parseExportInterval(cfg.Export.Interval)
+	compactSelected, err := resolveLayoutMode(rawSelected)
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	outputPath := cfg.Export.Output
-	if outputPath == "" {
-		outputPath = defaultExportPath(databasePath, mode)
-	}
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil && filepath.Dir(outputPath) != "." {
-		log.Fatal(err)
-	}
-
-	file, err := os.Create(outputPath)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer file.Close()
-
-	storeKind, err := storage.DetectStoreKind(databasePath)
+	format, err := resolveOutputFormat()
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	selection := storage.SessionSelection{
-		MissionName: cfg.Export.Mission,
-		SessionID:   cfg.Export.SessionID,
+		MissionName: strings.TrimSpace(*optMission),
+		SessionID:   *optSessionID,
 	}
 
-	switch storeKind {
-	case storage.StoreKindRaw:
-		session, frames, deviceNames, err := storage.LoadFramesForExport(databasePath, selection)
+	path := outputFilePath(*optOutput, inputPath, format)
+	file, err := createOutputFile(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer file.Close()
+
+	if rawSelected {
+		session, records, err := storage.LoadRawRecordsForExport(inputPath, selection)
 		if err != nil {
 			log.Fatal(err)
 		}
-		rows, err := exporter.BuildRows(frames, deviceNames, mode, interval)
-		if err != nil {
+		if err := writeRaw(file, format, session, records); err != nil {
 			log.Fatal(err)
 		}
-		if err := exporter.WriteTSV(file, session, deviceNames, rows); err != nil {
+		fmt.Printf("wrote %d rows to %s\n", len(records), path)
+		return
+	}
+
+	if !processedSelected {
+		processedSelected = true
+	}
+	session, records, err := storage.LoadProcessedRecordsForExport(inputPath, selection)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if compactSelected {
+		if err := writeCompactProcessed(file, format, session, records); err != nil {
 			log.Fatal(err)
 		}
-	case storage.StoreKindProcessed:
-		session, samples, deviceNames, columns, err := storage.LoadProcessedForExport(databasePath, selection)
-		if err != nil {
-			log.Fatal(err)
-		}
-		rows, err := exporter.BuildStructuredRows(samples, deviceNames, columns, mode, interval)
-		if err != nil {
-			log.Fatal(err)
-		}
-		if err := exporter.WriteStructuredTSV(file, session, columns, rows); err != nil {
-			log.Fatal(err)
-		}
+		fmt.Printf("wrote %d rows to %s\n", len(exporter.BuildCompactProcessedRecords(records)), path)
+		return
+	}
+	if err := writeProcessed(file, format, session, records); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("wrote %d rows to %s\n", len(records), path)
+}
+
+func configureUsage() {
+	getopt.SetParameters("<input.sqlite>")
+	getopt.CommandLine.SetProgram("geo-export")
+	getopt.CommandLine.SetUsage(func() {
+		fmt.Fprintln(os.Stderr, "Export geo-acq SQLite data to TSV or CSV.")
+		fmt.Fprintln(os.Stderr)
+		getopt.CommandLine.PrintUsage(os.Stderr)
+	})
+}
+
+func resolveSourceMode() (bool, bool, error) {
+	rawSelected := *optRaw
+	processedSelected := *optProcessed
+	if rawSelected && processedSelected {
+		return false, false, fmt.Errorf("use raw or processed export, not both")
+	}
+	if !rawSelected && !processedSelected {
+		processedSelected = true
+	}
+	return rawSelected, processedSelected, nil
+}
+
+func resolveLayoutMode(rawSelected bool) (bool, error) {
+	compactSelected := *optCompact
+	fullSelected := *optFull
+	if compactSelected && fullSelected {
+		return false, fmt.Errorf("use compact or full output, not both")
+	}
+	if !compactSelected && !fullSelected {
+		compactSelected = true
+	}
+	if rawSelected && compactSelected {
+		return false, fmt.Errorf("compact output is only available with processed export")
+	}
+	return compactSelected, nil
+}
+
+func resolveOutputFormat() (string, error) {
+	if *optCSV && *optTSV {
+		return "", fmt.Errorf("use csv or tsv output, not both")
+	}
+	if *optCSV && !*optTSV {
+		return exporter.FormatCSV, nil
+	}
+	return exporter.FormatTSV, nil
+}
+
+func writeRaw(file *os.File, format string, session exporter.Session, records []exporter.RawRecord) error {
+	switch format {
+	case exporter.FormatCSV:
+		return exporter.WriteRawCSV(file, session, records)
 	default:
-		log.Fatalf("unsupported store kind %q", storeKind)
+		return exporter.WriteRawTSV(file, session, records)
 	}
 }
 
-func parseExportInterval(value string) (time.Duration, error) {
-	if strings.TrimSpace(value) == "" {
-		return 0, nil
+func writeProcessed(file *os.File, format string, session exporter.Session, records []exporter.ProcessedRecord) error {
+	switch format {
+	case exporter.FormatCSV:
+		return exporter.WriteProcessedCSV(file, session, records)
+	default:
+		return exporter.WriteProcessedTSV(file, session, records)
 	}
-	return time.ParseDuration(value)
 }
 
-func defaultExportPath(databasePath string, mode string) string {
-	ext := filepath.Ext(databasePath)
-	base := strings.TrimSuffix(databasePath, ext)
-	if mode == "" {
-		mode = exporter.ModeSlowestDevice
+func writeCompactProcessed(file *os.File, format string, session exporter.Session, records []exporter.ProcessedRecord) error {
+	switch format {
+	case exporter.FormatCSV:
+		return exporter.WriteCompactProcessedCSV(file, session, records)
+	default:
+		return exporter.WriteCompactProcessedTSV(file, session, records)
 	}
-	return base + "-" + mode + ".tsv"
 }
 
-func defaultExportDatabasePath(cfg config.Config, configPath string) string {
-	if cfg.Backup.Processed {
-		processedPath := cfg.ProcessedBackupPath(configPath)
-		if processedPath != "" {
-			if _, err := os.Stat(processedPath); err == nil {
-				return processedPath
-			}
-		}
+func outputFilePath(explicit string, input string, format string) string {
+	if strings.TrimSpace(explicit) != "" {
+		return explicit
 	}
-	if cfg.RawBackupEnabled() {
-		return cfg.RawBackupPath(configPath)
+
+	ext := "." + format
+	currentExt := filepath.Ext(input)
+	if currentExt == "" {
+		return input + ext
 	}
-	return ""
+	return strings.TrimSuffix(input, currentExt) + ext
+}
+
+func createOutputFile(path string) (*os.File, error) {
+	if strings.TrimSpace(path) == "" {
+		return nil, fmt.Errorf("output path is required")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil && filepath.Dir(path) != "." {
+		return nil, err
+	}
+	return os.Create(path)
 }

@@ -5,29 +5,37 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
 
 const (
-	// ModeSlowestDevice aligns rows on the device with the fewest frames.
-	ModeSlowestDevice = "slowest_device"
-	// ModeFixedInterval aligns rows on a constant time step.
-	ModeFixedInterval = "fixed_interval"
+	FormatTSV = "tsv"
+	FormatCSV = "csv"
+
+	compactLatitudePrecision  = 7
+	compactLongitudePrecision = 7
+	compactSpeedPrecision     = 3
+	compactDepthPrecision     = 1
 )
 
-// Frame represents one raw NMEA frame loaded from SQLite.
-type Frame struct {
-	ReceivedAt time.Time
-	DeviceName string
-	Payload    string
+// RawRecord represents one raw frame exported from the raw SQLite store.
+type RawRecord struct {
+	ReceivedAt   time.Time
+	DeviceName   string
+	Transport    string
+	SentenceType string
+	Payload      string
 }
 
-// Sample represents one decoded processed observation loaded from SQLite.
-type Sample struct {
-	ReceivedAt time.Time
-	DeviceName string
-	Values     map[string]string
+// ProcessedRecord represents one decoded record exported from the processed SQLite store.
+type ProcessedRecord struct {
+	ReceivedAt   time.Time
+	DeviceName   string
+	Transport    string
+	SentenceType string
+	Values       map[string]string
 }
 
 // Session describes the exported acquisition session.
@@ -38,92 +46,45 @@ type Session struct {
 	StartedAt  time.Time
 }
 
-// Row represents one aligned export row.
-type Row struct {
-	Timestamp time.Time
-	Values    map[string]string
+// CompactProcessedRecord is a simplified processed export row for downstream GIS-style tools.
+type CompactProcessedRecord struct {
+	DateTimeUTC string
+	Latitude    string
+	Longitude   string
+	SpeedKnots  string
+	DepthMeters string
 }
 
-// BuildRows aligns raw frames on either the slowest device or a fixed interval.
-func BuildRows(frames []Frame, deviceNames []string, mode string, interval time.Duration) ([]Row, error) {
-	if len(frames) == 0 {
-		return nil, nil
-	}
-	if len(deviceNames) == 0 {
-		return nil, fmt.Errorf("no device names provided")
-	}
-
-	sort.Slice(frames, func(i, j int) bool {
-		if frames[i].ReceivedAt.Equal(frames[j].ReceivedAt) {
-			if frames[i].DeviceName == frames[j].DeviceName {
-				return frames[i].Payload < frames[j].Payload
-			}
-			return frames[i].DeviceName < frames[j].DeviceName
-		}
-		return frames[i].ReceivedAt.Before(frames[j].ReceivedAt)
-	})
-
-	anchors, err := buildAnchors(frames, deviceNames, mode, interval)
-	if err != nil {
-		return nil, err
-	}
-
-	rows := make([]Row, 0, len(anchors))
-	pointers := make(map[string]int, len(deviceNames))
-	latest := make(map[string]string, len(deviceNames))
-	grouped := groupFramesByDevice(frames, deviceNames)
-
-	for _, anchor := range anchors {
-		row := Row{
-			Timestamp: anchor,
-			Values:    make(map[string]string, len(deviceNames)),
-		}
-		for _, deviceName := range deviceNames {
-			deviceFrames := grouped[deviceName]
-			idx := pointers[deviceName]
-			for idx < len(deviceFrames) && !deviceFrames[idx].ReceivedAt.After(anchor) {
-				latest[deviceName] = deviceFrames[idx].Payload
-				idx++
-			}
-			pointers[deviceName] = idx
-			row.Values[deviceName] = latest[deviceName]
-		}
-		rows = append(rows, row)
-	}
-
-	return rows, nil
+// WriteRawTSV writes raw exported records in plain TSV format.
+func WriteRawTSV(w io.Writer, session Session, records []RawRecord) error {
+	return WriteRawSeparated(w, session, records, "\t")
 }
 
-// WriteTSV writes the export rows in a plain-text TSV format.
-func WriteTSV(w io.Writer, session Session, deviceNames []string, rows []Row) error {
+// WriteRawCSV writes raw exported records in plain CSV format.
+func WriteRawCSV(w io.Writer, session Session, records []RawRecord) error {
+	return WriteRawSeparated(w, session, records, ",")
+}
+
+// WriteRawSeparated writes raw exported records using the provided separator.
+func WriteRawSeparated(w io.Writer, session Session, records []RawRecord, sep string) error {
+	_ = session
 	bw := bufio.NewWriter(w)
 	defer bw.Flush()
 
-	if _, err := fmt.Fprintf(bw, "# mission=%s\n", session.Mission); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(bw, "# session_id=%d\n", session.ID); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(bw, "# config_file=%s\n", session.ConfigFile); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(bw, "# started_at_utc=%s\n", session.StartedAt.UTC().Format(time.RFC3339Nano)); err != nil {
+	header := []string{"received_at_utc", "device_name", "transport", "sentence_type", "payload"}
+	if _, err := fmt.Fprintln(bw, "# "+strings.Join(header, sep)); err != nil {
 		return err
 	}
 
-	header := append([]string{"timestamp_utc"}, deviceNames...)
-	if _, err := fmt.Fprintln(bw, strings.Join(header, "\t")); err != nil {
-		return err
-	}
-
-	for _, row := range rows {
-		fields := make([]string, 0, len(deviceNames)+1)
-		fields = append(fields, row.Timestamp.UTC().Format(time.RFC3339Nano))
-		for _, deviceName := range deviceNames {
-			fields = append(fields, sanitizeTSV(row.Values[deviceName]))
+	for _, record := range records {
+		fields := []string{
+			sanitizeSeparated(record.ReceivedAt.UTC().Format(time.RFC3339Nano), sep),
+			sanitizeSeparated(record.DeviceName, sep),
+			sanitizeSeparated(record.Transport, sep),
+			sanitizeSeparated(record.SentenceType, sep),
+			sanitizeSeparated(record.Payload, sep),
 		}
-		if _, err := fmt.Fprintln(bw, strings.Join(fields, "\t")); err != nil {
+		if _, err := fmt.Fprintln(bw, strings.Join(fields, sep)); err != nil {
 			return err
 		}
 	}
@@ -131,87 +92,50 @@ func WriteTSV(w io.Writer, session Session, deviceNames []string, rows []Row) er
 	return nil
 }
 
-// BuildStructuredRows aligns processed samples on either the slowest device or a fixed interval.
-func BuildStructuredRows(samples []Sample, deviceNames []string, columns []string, mode string, interval time.Duration) ([]Row, error) {
-	if len(samples) == 0 {
-		return nil, nil
-	}
-	if len(deviceNames) == 0 {
-		return nil, fmt.Errorf("no device names provided")
-	}
-
-	sort.Slice(samples, func(i, j int) bool {
-		if samples[i].ReceivedAt.Equal(samples[j].ReceivedAt) {
-			return samples[i].DeviceName < samples[j].DeviceName
-		}
-		return samples[i].ReceivedAt.Before(samples[j].ReceivedAt)
-	})
-
-	anchors, err := buildSampleAnchors(samples, deviceNames, mode, interval)
-	if err != nil {
-		return nil, err
-	}
-
-	rows := make([]Row, 0, len(anchors))
-	pointers := make(map[string]int, len(deviceNames))
-	latest := make(map[string]string, len(columns))
-	grouped := groupSamplesByDevice(samples, deviceNames)
-
-	for _, anchor := range anchors {
-		row := Row{
-			Timestamp: anchor,
-			Values:    make(map[string]string, len(columns)),
-		}
-		for _, deviceName := range deviceNames {
-			deviceSamples := grouped[deviceName]
-			idx := pointers[deviceName]
-			for idx < len(deviceSamples) && !deviceSamples[idx].ReceivedAt.After(anchor) {
-				for column, value := range deviceSamples[idx].Values {
-					latest[column] = value
-				}
-				idx++
-			}
-			pointers[deviceName] = idx
-		}
-		for _, column := range columns {
-			row.Values[column] = latest[column]
-		}
-		rows = append(rows, row)
-	}
-
-	return rows, nil
+// WriteProcessedTSV writes processed exported records in plain TSV format.
+func WriteProcessedTSV(w io.Writer, session Session, records []ProcessedRecord) error {
+	return WriteProcessedSeparated(w, session, records, "\t")
 }
 
-// WriteStructuredTSV writes aligned processed rows in a plain-text TSV format.
-func WriteStructuredTSV(w io.Writer, session Session, columns []string, rows []Row) error {
+// WriteProcessedCSV writes processed exported records in plain CSV format.
+func WriteProcessedCSV(w io.Writer, session Session, records []ProcessedRecord) error {
+	return WriteProcessedSeparated(w, session, records, ",")
+}
+
+// WriteProcessedSeparated writes processed exported records using the provided separator.
+func WriteProcessedSeparated(w io.Writer, session Session, records []ProcessedRecord, sep string) error {
+	_ = session
 	bw := bufio.NewWriter(w)
 	defer bw.Flush()
 
-	if _, err := fmt.Fprintf(bw, "# mission=%s\n", session.Mission); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(bw, "# session_id=%d\n", session.ID); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(bw, "# config_file=%s\n", session.ConfigFile); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(bw, "# started_at_utc=%s\n", session.StartedAt.UTC().Format(time.RFC3339Nano)); err != nil {
-		return err
-	}
-
-	header := append([]string{"timestamp_utc"}, columns...)
-	if _, err := fmt.Fprintln(bw, strings.Join(header, "\t")); err != nil {
-		return err
-	}
-
-	for _, row := range rows {
-		fields := make([]string, 0, len(columns)+1)
-		fields = append(fields, row.Timestamp.UTC().Format(time.RFC3339Nano))
-		for _, column := range columns {
-			fields = append(fields, sanitizeTSV(row.Values[column]))
+	columnSet := map[string]struct{}{}
+	for _, record := range records {
+		for column := range record.Values {
+			columnSet[column] = struct{}{}
 		}
-		if _, err := fmt.Fprintln(bw, strings.Join(fields, "\t")); err != nil {
+	}
+	columns := make([]string, 0, len(columnSet))
+	for column := range columnSet {
+		columns = append(columns, column)
+	}
+	sort.Strings(columns)
+
+	header := append([]string{"received_at_utc", "device_name", "transport", "sentence_type"}, columns...)
+	if _, err := fmt.Fprintln(bw, "# "+strings.Join(header, sep)); err != nil {
+		return err
+	}
+
+	for _, record := range records {
+		fields := []string{
+			sanitizeSeparated(record.ReceivedAt.UTC().Format(time.RFC3339Nano), sep),
+			sanitizeSeparated(record.DeviceName, sep),
+			sanitizeSeparated(record.Transport, sep),
+			sanitizeSeparated(record.SentenceType, sep),
+		}
+		for _, column := range columns {
+			fields = append(fields, sanitizeSeparated(record.Values[column], sep))
+		}
+		if _, err := fmt.Fprintln(bw, strings.Join(fields, sep)); err != nil {
 			return err
 		}
 	}
@@ -219,139 +143,102 @@ func WriteStructuredTSV(w io.Writer, session Session, columns []string, rows []R
 	return nil
 }
 
-func buildAnchors(frames []Frame, deviceNames []string, mode string, interval time.Duration) ([]time.Time, error) {
-	switch mode {
-	case "", ModeSlowestDevice:
-		return anchorsFromSlowestDevice(frames, deviceNames)
-	case ModeFixedInterval:
-		if interval <= 0 {
-			return nil, fmt.Errorf("fixed interval mode requires interval > 0")
-		}
-		return anchorsFromFixedInterval(frames, interval), nil
-	default:
-		return nil, fmt.Errorf("unsupported export mode %q", mode)
-	}
+// WriteCompactProcessedTSV writes one compact processed line per navigational fix.
+func WriteCompactProcessedTSV(w io.Writer, session Session, records []ProcessedRecord) error {
+	return WriteCompactProcessedSeparated(w, session, records, "\t")
 }
 
-func buildSampleAnchors(samples []Sample, deviceNames []string, mode string, interval time.Duration) ([]time.Time, error) {
-	switch mode {
-	case "", ModeSlowestDevice:
-		return sampleAnchorsFromSlowestDevice(samples, deviceNames)
-	case ModeFixedInterval:
-		if interval <= 0 {
-			return nil, fmt.Errorf("fixed interval mode requires interval > 0")
-		}
-		return sampleAnchorsFromFixedInterval(samples, interval), nil
-	default:
-		return nil, fmt.Errorf("unsupported export mode %q", mode)
-	}
+// WriteCompactProcessedCSV writes one compact processed line per navigational fix.
+func WriteCompactProcessedCSV(w io.Writer, session Session, records []ProcessedRecord) error {
+	return WriteCompactProcessedSeparated(w, session, records, ",")
 }
 
-func anchorsFromSlowestDevice(frames []Frame, deviceNames []string) ([]time.Time, error) {
-	grouped := groupFramesByDevice(frames, deviceNames)
+// WriteCompactProcessedSeparated writes compact processed rows using the provided separator.
+func WriteCompactProcessedSeparated(w io.Writer, session Session, records []ProcessedRecord, sep string) error {
+	_ = session
+	bw := bufio.NewWriter(w)
+	defer bw.Flush()
 
-	var anchorDevice string
-	minCount := -1
-	for _, deviceName := range deviceNames {
-		count := len(grouped[deviceName])
-		if count == 0 {
-			continue
+	header := []string{"datetime_utc", "latitude", "longitude", "speed_knots", "depth_meters"}
+	if _, err := fmt.Fprintln(bw, "# "+strings.Join(header, sep)); err != nil {
+		return err
+	}
+
+	for _, row := range BuildCompactProcessedRecords(records) {
+		fields := []string{
+			sanitizeSeparated(row.DateTimeUTC, sep),
+			sanitizeSeparated(row.Latitude, sep),
+			sanitizeSeparated(row.Longitude, sep),
+			sanitizeSeparated(row.SpeedKnots, sep),
+			sanitizeSeparated(row.DepthMeters, sep),
 		}
-		if minCount == -1 || count < minCount || (count == minCount && deviceName < anchorDevice) {
-			minCount = count
-			anchorDevice = deviceName
+		if _, err := fmt.Fprintln(bw, strings.Join(fields, sep)); err != nil {
+			return err
 		}
 	}
-	if anchorDevice == "" {
-		return nil, fmt.Errorf("no frames available for slowest device export")
-	}
 
-	anchors := make([]time.Time, 0, len(grouped[anchorDevice]))
-	for _, frame := range grouped[anchorDevice] {
-		anchors = append(anchors, frame.ReceivedAt)
-	}
-	return anchors, nil
+	return nil
 }
 
-func anchorsFromFixedInterval(frames []Frame, interval time.Duration) []time.Time {
-	start := frames[0].ReceivedAt
-	end := frames[len(frames)-1].ReceivedAt
-
-	anchors := []time.Time{start}
-	for cursor := start.Add(interval); !cursor.After(end); cursor = cursor.Add(interval) {
-		anchors = append(anchors, cursor)
-	}
-	if anchors[len(anchors)-1].Before(end) {
-		anchors = append(anchors, end)
-	}
-	return anchors
-}
-
-func sampleAnchorsFromSlowestDevice(samples []Sample, deviceNames []string) ([]time.Time, error) {
-	grouped := groupSamplesByDevice(samples, deviceNames)
-
-	var anchorDevice string
-	minCount := -1
-	for _, deviceName := range deviceNames {
-		count := len(grouped[deviceName])
-		if count == 0 {
-			continue
+// BuildCompactProcessedRecords reduces processed records to compact navigation rows.
+func BuildCompactProcessedRecords(records []ProcessedRecord) []CompactProcessedRecord {
+	sorted := append([]ProcessedRecord(nil), records...)
+	sort.Slice(sorted, func(i, j int) bool {
+		if sorted[i].ReceivedAt.Equal(sorted[j].ReceivedAt) {
+			if sorted[i].DeviceName == sorted[j].DeviceName {
+				return sorted[i].SentenceType < sorted[j].SentenceType
+			}
+			return sorted[i].DeviceName < sorted[j].DeviceName
 		}
-		if minCount == -1 || count < minCount || (count == minCount && deviceName < anchorDevice) {
-			minCount = count
-			anchorDevice = deviceName
+		return sorted[i].ReceivedAt.Before(sorted[j].ReceivedAt)
+	})
+
+	latestDepth := ""
+	rows := []CompactProcessedRecord{}
+	for _, record := range sorted {
+		switch record.SentenceType {
+		case "DBT":
+			if value := strings.TrimSpace(record.Values["depth_meters"]); value != "" {
+				latestDepth = value
+			}
+		case "RMC":
+			datetimeUTC := strings.TrimSpace(record.Values["datetime_utc"])
+			latitude := strings.TrimSpace(record.Values["latitude"])
+			longitude := strings.TrimSpace(record.Values["longitude"])
+			speedKnots := strings.TrimSpace(record.Values["speed_knots"])
+			if datetimeUTC == "" || latitude == "" || longitude == "" {
+				continue
+			}
+			rows = append(rows, CompactProcessedRecord{
+				DateTimeUTC: datetimeUTC,
+				Latitude:    formatFixedFloat(latitude, compactLatitudePrecision),
+				Longitude:   formatFixedFloat(longitude, compactLongitudePrecision),
+				SpeedKnots:  formatFixedFloat(speedKnots, compactSpeedPrecision),
+				DepthMeters: formatFixedFloat(latestDepth, compactDepthPrecision),
+			})
 		}
 	}
-	if anchorDevice == "" {
-		return nil, fmt.Errorf("no samples available for slowest device export")
-	}
-
-	anchors := make([]time.Time, 0, len(grouped[anchorDevice]))
-	for _, sample := range grouped[anchorDevice] {
-		anchors = append(anchors, sample.ReceivedAt)
-	}
-	return anchors, nil
+	return rows
 }
 
-func sampleAnchorsFromFixedInterval(samples []Sample, interval time.Duration) []time.Time {
-	start := samples[0].ReceivedAt
-	end := samples[len(samples)-1].ReceivedAt
-
-	anchors := []time.Time{start}
-	for cursor := start.Add(interval); !cursor.After(end); cursor = cursor.Add(interval) {
-		anchors = append(anchors, cursor)
+func formatFixedFloat(value string, precision int) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
 	}
-	if anchors[len(anchors)-1].Before(end) {
-		anchors = append(anchors, end)
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return value
 	}
-	return anchors
+	return fmt.Sprintf("%.*f", precision, parsed)
 }
 
-func groupFramesByDevice(frames []Frame, deviceNames []string) map[string][]Frame {
-	grouped := make(map[string][]Frame, len(deviceNames))
-	for _, deviceName := range deviceNames {
-		grouped[deviceName] = nil
-	}
-	for _, frame := range frames {
-		grouped[frame.DeviceName] = append(grouped[frame.DeviceName], frame)
-	}
-	return grouped
-}
-
-func groupSamplesByDevice(samples []Sample, deviceNames []string) map[string][]Sample {
-	grouped := make(map[string][]Sample, len(deviceNames))
-	for _, deviceName := range deviceNames {
-		grouped[deviceName] = nil
-	}
-	for _, sample := range samples {
-		grouped[sample.DeviceName] = append(grouped[sample.DeviceName], sample)
-	}
-	return grouped
-}
-
-func sanitizeTSV(value string) string {
+func sanitizeSeparated(value string, sep string) string {
 	value = strings.ReplaceAll(value, "\t", " ")
 	value = strings.ReplaceAll(value, "\r", " ")
 	value = strings.ReplaceAll(value, "\n", " ")
+	if sep == "," {
+		value = strings.ReplaceAll(value, ",", " ")
+	}
 	return value
 }

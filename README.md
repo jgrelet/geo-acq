@@ -339,14 +339,7 @@ With this configuration:
 - `raw = true` enables the append-only raw acquisition database `<mission>-raw.sqlite`
 - `processed = true` enables the decoded acquisition database `<mission>-data.sqlite`
 
-Offline export parameters are configured in the `[export]` section:
-
-- `database`: SQLite source database
-- `output`: text output file
-- `mode`: `slowest_device` or `fixed_interval`
-- `interval`: required for `fixed_interval`
-- `mission`: optional mission filter
-- `session_id`: optional session selector
+The export binary is configured directly from the command line rather than through TOML.
 
 ## Data flow and storage
 
@@ -439,19 +432,17 @@ This keeps the acquisition layer focused on preserving observations while making
 
 The export binary reads either a raw or a processed SQLite database and writes a plain-text TSV file.
 
-Two alignment strategies are currently supported:
+The CLI is intentionally simple:
 
-- `slowest_device`: one output row per frame of the least frequent device
-- `fixed_interval`: one output row per constant time step
+- `-raw <file.sqlite>` exports the raw acquisition store
+- `-processed <file.sqlite>` exports the processed acquisition store
+- `-o <file.tsv>` overrides the output path
+- `-mission <name>` optionally selects the latest session for one mission
+- `-session-id <id>` optionally selects one exact acquisition session
 
-At each output timestamp, the exporter keeps the latest known values for each device at or before that timestamp.
+Exactly one of `-raw` or `-processed` must be provided.
 
-If `export.database` is omitted:
-
-- `geo-export` prefers `<mission>-data.sqlite` when `backup.processed = true` and the file exists
-- otherwise it falls back to `<mission>-raw.sqlite`
-
-If `export.database` is provided explicitly, `geo-export` detects automatically whether it is a raw or processed acquisition database.
+If `-o` is omitted, `geo-export` writes the TSV next to the input SQLite file with the same basename and a `.tsv` extension.
 
 ### Build the exporter
 
@@ -465,36 +456,39 @@ On GNU Make:
 make build-export
 ```
 
-### Export on the slowest device rhythm
+### Export raw SQLite data
 
 ```bash
-./bin/geo-export.exe -config examples/export-slowest.toml
+./bin/geo-export.exe -raw examples/udp-listener-raw.sqlite
 ```
 
-On Linux/macOS:
-
 ```bash
-./bin/geo-export -config examples/export-slowest.toml
+./bin/geo-export -raw examples/udp-listener-raw.sqlite
 ```
 
-### Export on a fixed interval
+### Export processed SQLite data
 
 ```bash
-./bin/geo-export.exe -config examples/export-fixed.toml
+./bin/geo-export.exe -processed examples/udp-listener-data.sqlite
 ```
 
-On Linux/macOS:
+```bash
+./bin/geo-export -processed examples/udp-listener-data.sqlite
+```
+
+### Export to a custom TSV file
 
 ```bash
-./bin/geo-export -config examples/export-fixed.toml
+./bin/geo-export.exe -processed examples/udp-listener-data.sqlite -o exports/mission.tsv
 ```
 
 The generated TSV file contains:
 
 - a metadata preamble with mission and session information
-- one `timestamp_utc` column
-- one column per device when exporting raw data
-- structured columns such as `gps.rmc.latitude` or `echosounder.dbt.depth_meters` when exporting processed data
+- fixed descriptive columns when exporting raw data:
+- `received_at_utc`, `device_name`, `transport`, `sentence_type`, `payload`
+- fixed descriptive columns plus decoded value columns when exporting processed data:
+- `received_at_utc`, `device_name`, `transport`, `sentence_type`, then one column per available decoded field
 
 ## Acquisition mode
 
@@ -612,8 +606,6 @@ For a multi-machine test, replace `127.0.0.1` in `examples/udp-sender.toml` with
 
 - `examples/udp-listener.toml`: UDP receiver config for `geo-acq`
 - `examples/udp-sender.toml`: UDP sender config for simulators
-- `examples/export-slowest.toml`: export using the slowest device as reference
-- `examples/export-fixed.toml`: export using a constant interval
 - `docs/udp-test.md`: short UDP test memo
 
 ## Notes
