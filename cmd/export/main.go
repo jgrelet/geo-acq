@@ -46,6 +46,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	if err := validateRequestedStoreKind(inputPath, rawSelected, processedSelected); err != nil {
+		log.Fatal(err)
+	}
 	compactSelected, err := resolveLayoutMode(rawSelected)
 	if err != nil {
 		log.Fatal(err)
@@ -194,4 +197,20 @@ func createOutputFile(path string) (*os.File, error) {
 		return nil, err
 	}
 	return os.Create(path)
+}
+
+func validateRequestedStoreKind(inputPath string, rawSelected bool, processedSelected bool) error {
+	storeKind, err := storage.DetectStoreKind(inputPath)
+	if err != nil {
+		return err
+	}
+
+	switch {
+	case rawSelected && storeKind == storage.StoreKindProcessed:
+		return fmt.Errorf("input looks like a processed database; use --processed instead of --raw")
+	case processedSelected && storeKind == storage.StoreKindRaw:
+		return fmt.Errorf("input looks like a raw database; use --raw instead of --processed")
+	}
+
+	return nil
 }
