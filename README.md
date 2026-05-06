@@ -21,7 +21,7 @@ The project currently supports:
 - `cmd/simul/echosounder`: echosounder simulator binary
 - `config/`: configuration loading
 - `devices/`: serial and UDP transport layer
-- `storage/`: SQLite raw acquisition persistence
+- `storage/`: SQLite acquisition persistence for raw and processed data
 - `simul/`: simulation logic
 - `examples/`: ready-to-use sample configurations
 
@@ -200,7 +200,7 @@ When `Start` is used:
 6. frames are read from active devices
 7. each frame is timestamped
 8. each frame is decoded when possible
-9. the raw frame plus decoded JSON are stored in SQLite
+9. the configured raw and/or processed backups are updated in SQLite
 10. the GUI is updated through Wails runtime events
 
 The session badge can therefore show a mixed session with both live and simulated devices.
@@ -324,7 +324,20 @@ Mission metadata is configured in the `[mission]` section:
 - `pi`: principal investigator
 - `organization`: lab, institute, or operator organization
 
-The acquisition database path is configured in `[acq].file`.
+Acquisition persistence is configured in `[backup]`.
+
+Example:
+
+```toml
+[backup]
+raw       = true
+processed = true
+```
+
+With this configuration:
+
+- `raw = true` enables the append-only raw acquisition database `<mission>-raw.sqlite`
+- `processed = true` enables the decoded acquisition database `<mission>-data.sqlite`
 
 Offline export parameters are configured in the `[export]` section:
 
@@ -347,7 +360,7 @@ The current processing pipeline is intentionally simple:
 6. Trailing `CRLF` is removed.
 7. Each complete NMEA sentence is pushed to the device `Data` channel.
 8. `geo-acq` timestamps the sentence at reception time.
-9. The raw sentence is stored in SQLite with mission and session metadata.
+9. The sentence can be stored in a raw SQLite database, a processed SQLite database, or both.
 10. If `global.echo = true`, the sentence is also printed to stdout.
 
 In practice, the data path is:
@@ -365,18 +378,15 @@ At the moment, `geo-acq`:
 - reads raw NMEA sentences from all active configured devices
 - keeps sentence boundaries intact
 - timestamps frames on reception
-- stores them in SQLite as append-only raw records
+- decodes supported NMEA sentences during acquisition
+- can store raw frames and/or processed records in SQLite
 - optionally prints received sentences to standard output
 
-There is not yet a higher-level processing stage that:
-
-- parses incoming sentences in the acquisition binary
-- enriches or merges GPS and echosounder data
-- computes scientific products directly during acquisition
+There is not yet a higher-level processing stage that merges devices together or computes scientific products directly during acquisition.
 
 ### What is stored today
 
-The runtime now persists acquisition data in a SQLite database defined by `[acq].file`.
+When `backup.raw = true`, the runtime persists acquisition data in a mission-derived SQLite database named `<mission>-raw.sqlite`.
 
 The storage model is append-only and centered on raw frames:
 
@@ -393,30 +403,56 @@ Each raw frame stores:
 - transport type
 - raw NMEA payload
 
+When `backup.processed = true`, the runtime also persists decoded acquisition data in a mission-derived SQLite database named `<mission>-data.sqlite`.
+
+The current processed schema is organized by sentence type:
+
+- `gga_records`
+- `rmc_records`
+- `vtg_records`
+- `dbt_records`
+
+Each processed record keeps:
+
+- mission reference
+- acquisition session reference
+- UTC reception timestamp
+- device name
+- transport type
+- decoded fields in typed SQLite columns
+- the normalized decoded JSON payload for traceability
+
 The `log` field is still present in the configuration, but the current runtime mainly writes operational messages to stdout rather than managing a dedicated log file.
 
 ### Current implication
 
 If you run `geo-acq` today:
 
-- incoming NMEA sentences are stored in SQLite
+- incoming NMEA sentences can be stored in one or two SQLite databases depending on `[backup]`
 - incoming NMEA sentences are visible in the terminal only if `global.echo = true`
 - transport errors stop the process
 - one acquisition session is created for each program start
 - mission metadata is attached to the stored data
 
-This keeps the acquisition layer focused on preserving raw observations, while later scientific extraction can happen in a separate application.
+This keeps the acquisition layer focused on preserving observations while making later scientific extraction easier from the processed store.
 
 ## Export mode
 
-The export binary reads raw frames from SQLite and writes a plain-text TSV file.
+The export binary reads either a raw or a processed SQLite database and writes a plain-text TSV file.
 
 Two alignment strategies are currently supported:
 
 - `slowest_device`: one output row per frame of the least frequent device
 - `fixed_interval`: one output row per constant time step
 
-At each output timestamp, the exporter keeps the latest known raw payload for each device at or before that timestamp.
+At each output timestamp, the exporter keeps the latest known values for each device at or before that timestamp.
+
+If `export.database` is omitted:
+
+- `geo-export` prefers `<mission>-data.sqlite` when `backup.processed = true` and the file exists
+- otherwise it falls back to `<mission>-raw.sqlite`
+
+If `export.database` is provided explicitly, `geo-export` detects automatically whether it is a raw or processed acquisition database.
 
 ### Build the exporter
 
@@ -458,7 +494,8 @@ The generated TSV file contains:
 
 - a metadata preamble with mission and session information
 - one `timestamp_utc` column
-- one raw payload column per device
+- one column per device when exporting raw data
+- structured columns such as `gps.rmc.latitude` or `echosounder.dbt.depth_meters` when exporting processed data
 
 ## Acquisition mode
 
@@ -500,7 +537,8 @@ The listener example enables:
 
 - GPS on UDP port `10183`
 - echosounder on UDP port `10184`
-- raw storage in `geo-acq-udp-listener.sqlite`
+- raw storage in `udp-listener-raw.sqlite`
+- processed storage in `udp-listener-data.sqlite` when `processed = true`
 
 ## Simulation mode
 
@@ -584,4 +622,4 @@ For a multi-machine test, replace `127.0.0.1` in `examples/udp-sender.toml` with
 - Local Go caches are redirected to `.gocache/` and `.gomodcache/` by the `Taskfile`
 - The serial reader now consumes complete NMEA lines terminated by `CRLF`
 - UDP is implemented for both acquisition and simulation workflows
-- SQLite is used as the raw acquisition store
+- SQLite is used for both raw and processed acquisition stores

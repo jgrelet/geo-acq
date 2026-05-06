@@ -8,8 +8,9 @@ debug          = false
 echo           = true
 log            = "geo-acq.log"
 
-[acq]
-file           = "geo-acq.sqlite"
+[backup]
+raw            = true
+processed      = false
 
 [devices]
 

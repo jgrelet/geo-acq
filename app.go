@@ -44,11 +44,12 @@ type App struct {
 }
 
 type acquisitionSession struct {
-	mode    string
-	cancel  context.CancelFunc
-	done    chan struct{}
-	devices []*devices.Device
-	store   *storage.SQLiteStore
+	mode           string
+	cancel         context.CancelFunc
+	done           chan struct{}
+	devices        []*devices.Device
+	store          *storage.SQLiteStore
+	processedStore *storage.ProcessedSQLiteStore
 }
 
 type AppState struct {
@@ -248,7 +249,7 @@ func (a *App) ToggleDeviceSimulation(name string) (AppState, error) {
 	state.LastSentenceType = ""
 	state.LastRawFrame = ""
 	state.DecodedJSON = ""
-		state.LastError = ""
+	state.LastError = ""
 
 	a.mu.Unlock()
 	return a.GetState(), nil
@@ -293,17 +294,31 @@ func (a *App) StartAcquisition() error {
 		return a.fail(fmt.Errorf("no active devices found in configuration"))
 	}
 
-	store, err := storage.OpenSQLite(cfg.Acq.File, cfg.Mission, path)
-	if err != nil {
-		return a.fail(err)
+	var store *storage.SQLiteStore
+	if cfg.RawBackupEnabled() {
+		store, err = storage.OpenSQLite(cfg.RawBackupPath(path), cfg.Mission, path)
+		if err != nil {
+			return a.fail(err)
+		}
+	}
+	var processedStore *storage.ProcessedSQLiteStore
+	if cfg.Backup.Processed {
+		processedStore, err = storage.OpenProcessedSQLite(cfg.ProcessedBackupPath(path), cfg.Mission, path)
+		if err != nil {
+			if store != nil {
+				_ = store.Close()
+			}
+			return a.fail(err)
+		}
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	session := &acquisitionSession{
-		mode:   a.sessionModeLocked(),
-		cancel: cancel,
-		done:   make(chan struct{}),
-		store:  store,
+		mode:           a.sessionModeLocked(),
+		cancel:         cancel,
+		done:           make(chan struct{}),
+		store:          store,
+		processedStore: processedStore,
 	}
 
 	for _, name := range deviceNames {
@@ -470,6 +485,17 @@ func (a *App) handleFrame(session *acquisitionSession, frame FrameEvent) {
 			a.setLastError(fmt.Sprintf("insert raw frame: %v", err))
 		}
 	}
+	if session != nil && session.processedStore != nil && frame.DecodedJSON != "" {
+		if err := session.processedStore.SaveProcessedFrame(storage.ProcessedFrame{
+			ReceivedAt:   mustParseTime(frame.ReceivedAt),
+			DeviceName:   frame.DeviceName,
+			Transport:    frame.Transport,
+			SentenceType: storedSentenceType(frame),
+			DecodedJSON:  frame.DecodedJSON,
+		}); err != nil {
+			a.setLastError(fmt.Sprintf("insert processed frame: %v", err))
+		}
+	}
 
 	a.mu.Lock()
 	panel, ok := a.deviceStates[frame.DeviceName]
@@ -527,6 +553,9 @@ func (a *App) cleanupSession(session *acquisitionSession) {
 	}
 	if session.store != nil {
 		_ = session.store.Close()
+	}
+	if session.processedStore != nil {
+		_ = session.processedStore.Close()
 	}
 	select {
 	case <-session.done:
@@ -608,7 +637,7 @@ func (a *App) snapshotConfigLocked() ConfigView {
 			PI:           a.cfg.Mission.PI,
 			Organization: a.cfg.Mission.Organization,
 		},
-		Database:  a.cfg.Acq.File,
+		Database:  a.cfg.RawBackupPath(a.configPath),
 		Debug:     a.cfg.Global.Debug,
 		Echo:      a.cfg.Global.Echo,
 		DeviceCfg: devicesCfg,

@@ -3,11 +3,11 @@ name           = "udp-listener"
 pi             = "the PI"
 organization   = "theName"
 
-[acq]
-file           = "examples/geo-acq-udp-listener.sqlite"
+[backup]
+raw            = true
+processed      = false
 
 [export]
-database       = "geo-acq-udp-listener.sqlite"
 output         = "export-fixed.tsv"
 mode           = "fixed_interval"
 mission        = "udp-listener"

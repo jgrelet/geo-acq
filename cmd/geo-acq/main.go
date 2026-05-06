@@ -36,11 +36,31 @@ func main() {
 		log.Fatal(err)
 	}
 
-	store, err := storage.OpenSQLite(cfg.Acq.File, cfg.Mission, *configPath)
-	if err != nil {
-		log.Fatal(err)
+	var store *storage.SQLiteStore
+	if cfg.RawBackupEnabled() {
+		store, err = storage.OpenSQLite(cfg.RawBackupPath(*configPath), cfg.Mission, *configPath)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
-	defer store.Close()
+	var processedStore *storage.ProcessedSQLiteStore
+	if cfg.Backup.Processed {
+		processedStore, err = storage.OpenProcessedSQLite(cfg.ProcessedBackupPath(*configPath), cfg.Mission, *configPath)
+		if err != nil {
+			if store != nil {
+				_ = store.Close()
+			}
+			log.Fatal(err)
+		}
+	}
+	defer func() {
+		if store != nil {
+			_ = store.Close()
+		}
+		if processedStore != nil {
+			_ = processedStore.Close()
+		}
+	}()
 
 	deviceNames := readyDeviceNames(cfg)
 	if len(deviceNames) == 0 {
@@ -109,15 +129,28 @@ func main() {
 			if cfg.Global.Echo {
 				fmt.Println(formatTerminalFrame(msg))
 			}
-			if err := store.SaveRawFrame(storage.RawFrame{
-				ReceivedAt:   msg.receivedAt,
-				DeviceName:   msg.deviceName,
-				Transport:    msg.transport,
-				Payload:      msg.payload,
-				SentenceType: msg.sentenceType,
-				DecodedJSON:  msg.decodedJSON,
-			}); err != nil {
-				log.Fatal(err)
+			if store != nil {
+				if err := store.SaveRawFrame(storage.RawFrame{
+					ReceivedAt:   msg.receivedAt,
+					DeviceName:   msg.deviceName,
+					Transport:    msg.transport,
+					Payload:      msg.payload,
+					SentenceType: msg.sentenceType,
+					DecodedJSON:  msg.decodedJSON,
+				}); err != nil {
+					log.Fatal(err)
+				}
+			}
+			if processedStore != nil && msg.decodedJSON != "" {
+				if err := processedStore.SaveProcessedFrame(storage.ProcessedFrame{
+					ReceivedAt:   msg.receivedAt,
+					DeviceName:   msg.deviceName,
+					Transport:    msg.transport,
+					SentenceType: msg.sentenceType,
+					DecodedJSON:  msg.decodedJSON,
+				}); err != nil {
+					log.Fatal(err)
+				}
 			}
 		case sig := <-sigCh:
 			fmt.Printf("Exit on signal %s...\n", sig)

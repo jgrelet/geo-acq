@@ -2,7 +2,9 @@ package config
 
 import (
 	"fmt"
+	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -24,10 +26,10 @@ type UDP struct {
 
 // Device struct type = NMEA, Device serial or UDPs
 type Device struct {
-	Type   string
-	Use    bool
-	Mode   string
-	Device string
+	Type     string
+	Use      bool
+	Mode     string
+	Device   string
 	Sentence string
 }
 
@@ -66,6 +68,12 @@ type Export struct {
 	SessionID int64  `toml:"session_id"`
 }
 
+// Backup describes acquisition persistence policy.
+type Backup struct {
+	Raw       bool `toml:"raw"`
+	Processed bool `toml:"processed"`
+}
+
 // Config is the Go representation of toml file
 type Config struct {
 	Mission Mission
@@ -74,13 +82,14 @@ type Config struct {
 		Echo  bool
 		Log   string
 	}
-	Acq struct {
-		File string
-	}
+	Backup  Backup `toml:"backup"`
 	Devices map[string]Device
 	Serials map[string]SerialPort
 	UDP     map[string]UDP
 	Export  Export
+	Acq     struct {
+		File string
+	} `toml:"acq"`
 }
 
 // Load returns a Config struct from the content of toml configFile.
@@ -89,6 +98,7 @@ func Load(configFile string) (Config, error) {
 	if _, err := toml.DecodeFile(configFile, &cfg); err != nil {
 		return Config{}, fmt.Errorf("load config %q: %w", configFile, err)
 	}
+	cfg.normalize()
 	return cfg, nil
 }
 
@@ -107,4 +117,70 @@ func New(configFile string) Config {
 		panic(fmt.Sprintf("Error func GetConfig: file= %s -> %s\n", configFile, err))
 	}
 	return cfg
+}
+
+func (c *Config) normalize() {
+	if !c.Backup.Raw && !c.Backup.Processed && strings.TrimSpace(c.Acq.File) != "" {
+		c.Backup.Raw = true
+	}
+}
+
+// RawBackupEnabled reports whether raw acquisition persistence is enabled.
+func (c Config) RawBackupEnabled() bool {
+	return c.Backup.Raw || strings.TrimSpace(c.Acq.File) != ""
+}
+
+// RawBackupPath returns the raw SQLite path for the current mission.
+func (c Config) RawBackupPath(configFile string) string {
+	if strings.TrimSpace(c.Acq.File) != "" {
+		return c.Acq.File
+	}
+	if !c.RawBackupEnabled() {
+		return ""
+	}
+
+	dir := filepath.Dir(configFile)
+	if dir == "" {
+		dir = "."
+	}
+	return filepath.Join(dir, backupBaseName(c.Mission.Name)+"-raw.sqlite")
+}
+
+// ProcessedBackupPath returns the processed SQLite path for the current mission.
+func (c Config) ProcessedBackupPath(configFile string) string {
+	if !c.Backup.Processed {
+		return ""
+	}
+
+	dir := filepath.Dir(configFile)
+	if dir == "" {
+		dir = "."
+	}
+	return filepath.Join(dir, backupBaseName(c.Mission.Name)+"-data.sqlite")
+}
+
+func backupBaseName(missionName string) string {
+	name := strings.TrimSpace(missionName)
+	if name == "" {
+		return "geo-acq"
+	}
+
+	replacer := strings.NewReplacer(
+		"/", "-",
+		"\\", "-",
+		":", "-",
+		"*", "-",
+		"?", "-",
+		"\"", "-",
+		"<", "-",
+		">", "-",
+		"|", "-",
+	)
+	name = replacer.Replace(name)
+	name = strings.Join(strings.Fields(name), "-")
+	name = strings.Trim(name, ".- ")
+	if name == "" {
+		return "geo-acq"
+	}
+	return name
 }

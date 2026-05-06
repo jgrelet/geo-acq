@@ -8,8 +8,9 @@ debug          = false
 echo           = true
 log            = "geo-acq-udp-sender.log"
 
-[acq]
-file           = "geo-acq-udp-sender.sqlite"
+[backup]
+raw            = true
+processed      = false
 
 [devices]
 

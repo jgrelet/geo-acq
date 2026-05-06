@@ -24,10 +24,10 @@ func main() {
 
 	databasePath := cfg.Export.Database
 	if databasePath == "" {
-		databasePath = cfg.Acq.File
+		databasePath = defaultExportDatabasePath(cfg, *configPath)
 	}
 	if databasePath == "" {
-		log.Fatal("export.database or acq.file must be set")
+		log.Fatal("export.database must be set or a backup database must be enabled")
 	}
 
 	mode := cfg.Export.Mode
@@ -36,19 +36,6 @@ func main() {
 	}
 
 	interval, err := parseExportInterval(cfg.Export.Interval)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	session, frames, deviceNames, err := storage.LoadFramesForExport(databasePath, storage.SessionSelection{
-		MissionName: cfg.Export.Mission,
-		SessionID:   cfg.Export.SessionID,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	rows, err := exporter.BuildRows(frames, deviceNames, mode, interval)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -67,8 +54,43 @@ func main() {
 	}
 	defer file.Close()
 
-	if err := exporter.WriteTSV(file, session, deviceNames, rows); err != nil {
+	storeKind, err := storage.DetectStoreKind(databasePath)
+	if err != nil {
 		log.Fatal(err)
+	}
+
+	selection := storage.SessionSelection{
+		MissionName: cfg.Export.Mission,
+		SessionID:   cfg.Export.SessionID,
+	}
+
+	switch storeKind {
+	case storage.StoreKindRaw:
+		session, frames, deviceNames, err := storage.LoadFramesForExport(databasePath, selection)
+		if err != nil {
+			log.Fatal(err)
+		}
+		rows, err := exporter.BuildRows(frames, deviceNames, mode, interval)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if err := exporter.WriteTSV(file, session, deviceNames, rows); err != nil {
+			log.Fatal(err)
+		}
+	case storage.StoreKindProcessed:
+		session, samples, deviceNames, columns, err := storage.LoadProcessedForExport(databasePath, selection)
+		if err != nil {
+			log.Fatal(err)
+		}
+		rows, err := exporter.BuildStructuredRows(samples, deviceNames, columns, mode, interval)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if err := exporter.WriteStructuredTSV(file, session, columns, rows); err != nil {
+			log.Fatal(err)
+		}
+	default:
+		log.Fatalf("unsupported store kind %q", storeKind)
 	}
 }
 
@@ -86,4 +108,19 @@ func defaultExportPath(databasePath string, mode string) string {
 		mode = exporter.ModeSlowestDevice
 	}
 	return base + "-" + mode + ".tsv"
+}
+
+func defaultExportDatabasePath(cfg config.Config, configPath string) string {
+	if cfg.Backup.Processed {
+		processedPath := cfg.ProcessedBackupPath(configPath)
+		if processedPath != "" {
+			if _, err := os.Stat(processedPath); err == nil {
+				return processedPath
+			}
+		}
+	}
+	if cfg.RawBackupEnabled() {
+		return cfg.RawBackupPath(configPath)
+	}
+	return ""
 }
