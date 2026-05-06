@@ -9,7 +9,6 @@ import {
   SaveConfig,
   SelectConfigFile,
   StartAcquisition,
-  StartDemo,
   StopAcquisition,
 } from "../wailsjs/go/main/App.js";
 
@@ -39,7 +38,6 @@ document.querySelector("#app").innerHTML = `
         </div>
         <div class="toolbar-actions">
           <button id="start-live" class="btn btn-primary">Start</button>
-          <button id="start-demo" class="btn btn-highlight">Start demo</button>
           <button id="stop-session" class="btn btn-danger">Stop</button>
         </div>
       </div>
@@ -198,14 +196,6 @@ document.getElementById("start-live").addEventListener("click", async () => {
   });
 });
 
-document.getElementById("start-demo").addEventListener("click", async () => {
-  await safely(async () => {
-    await StartDemo();
-    state.activeTab = "devices";
-    applyState(await GetState());
-  });
-});
-
 document.getElementById("stop-session").addEventListener("click", async () => {
   await safely(async () => {
     await StopAcquisition();
@@ -247,7 +237,7 @@ EventsOn("geoacq:frame", (frame) => {
     const configuredSentences = configuredSentenceDisplayForDevice(snapshot, device.name);
     return {
       ...device,
-      status: frame.mode === "demo" ? "demo" : "streaming",
+      status: frame.mode === "simulate" ? "simulate" : "streaming",
       frameCount: (device.frameCount || 0) + 1,
       lastSeen: shouldUseDecodedValues ? frame.receivedAt : device.lastSeen,
       lastSentenceType: shouldUseDecodedValues ? configuredSentences : device.lastSentenceType,
@@ -324,8 +314,6 @@ function render() {
             <span class="status-pill status-${escapeHTML(device.status || "ready")}">${escapeHTML(device.status || "ready")}</span>
           </div>
           <div class="device-stats">
-            <div><span>Type</span><strong>${escapeHTML(device.type || "n/a")}</strong></div>
-            <div><span>Enabled</span><strong>${device.enabled ? "yes" : "no"}</strong></div>
             <div><span>Frames</span><strong>${device.frameCount || 0}</strong></div>
             <div><span>Sentences</span><strong>${escapeHTML(configuredSentences || device.lastSentenceType || "n/a")}</strong></div>
           </div>
@@ -429,7 +417,7 @@ function formatDecodedLabel(key) {
 
 function formatDecodedValue(key, value) {
   if ((key === "latitude" || key === "longitude") && typeof value === "number") {
-    return formatDMS(value, key === "latitude");
+    return formatDMSClean(value, key === "latitude");
   }
 
   if (Array.isArray(value)) {
@@ -441,6 +429,23 @@ function formatDecodedValue(key, value) {
   }
 
   return String(value);
+}
+
+function formatDMSClean(decimal, isLatitude) {
+  const absolute = Math.abs(decimal);
+  const degrees = Math.floor(absolute);
+  const minutesFloat = (absolute - degrees) * 60;
+  const minutes = Math.floor(minutesFloat);
+  const seconds = (minutesFloat - minutes) * 60;
+  const hemisphere = isLatitude
+    ? decimal >= 0
+      ? "N"
+      : "S"
+    : decimal >= 0
+      ? "E"
+      : "W";
+
+  return `${degrees}\u00B0${minutes}\u2032${seconds.toFixed(1)}\u2033 ${hemisphere}`;
 }
 
 function formatDMS(decimal, isLatitude) {

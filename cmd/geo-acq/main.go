@@ -42,9 +42,9 @@ func main() {
 	}
 	defer store.Close()
 
-	deviceNames := enabledDeviceNames(cfg)
+	deviceNames := readyDeviceNames(cfg)
 	if len(deviceNames) == 0 {
-		log.Fatal("no enabled devices found in configuration")
+		log.Fatal("no ready devices found in configuration")
 	}
 
 	messageCh := make(chan deviceMessage)
@@ -143,10 +143,10 @@ func formatTerminalFrame(msg deviceMessage) string {
 	)
 }
 
-func enabledDeviceNames(cfg config.Config) []string {
+func readyDeviceNames(cfg config.Config) []string {
 	names := make([]string, 0, len(cfg.Devices))
 	for name, device := range cfg.Devices {
-		if device.Use {
+		if device.NormalizedMode() == "ready" {
 			names = append(names, name)
 		}
 	}

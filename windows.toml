@@ -15,13 +15,13 @@ file           = "geo-acq.sqlite"
 
 	[devices.gps]
 	type           = "nmea"
-	use            = true
+	mode           = "ready"
 	device         = "serial"
 	sentence       = "GGA,RMC"
 
 	[devices.echosounder]
 	type           = "nmea"
-	use            = false
+	mode           = "disabled"
 	device         = "serial"
 	sentence       = "DBT"
 
@@ -50,4 +50,3 @@ file           = "geo-acq.sqlite"
 	[udp.echosounder]
 	host           = ""
 	port           = "10184"
-

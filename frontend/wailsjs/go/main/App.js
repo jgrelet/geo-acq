@@ -26,10 +26,6 @@ export function StartAcquisition() {
   return window['go']['main']['App']['StartAcquisition']();
 }
 
-export function StartDemo() {
-  return window['go']['main']['App']['StartDemo']();
-}
-
 export function StopAcquisition() {
   return window['go']['main']['App']['StopAcquisition']();
 }

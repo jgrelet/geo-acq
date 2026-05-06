@@ -397,7 +397,7 @@
 
 .status-ready,
 .status-streaming,
-.status-demo,
+.status-simulate,
 .status-connected,
 .status-disabled {
   color: #07111a;
@@ -413,7 +413,7 @@
   background: #70efc0;
 }
 
-.status-demo {
+.status-simulate {
   background: #ffd77c;
 }
 

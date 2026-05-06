@@ -26,8 +26,27 @@ type UDP struct {
 type Device struct {
 	Type   string
 	Use    bool
+	Mode   string
 	Device string
 	Sentence string
+}
+
+func (d Device) NormalizedMode() string {
+	mode := d.Mode
+	if mode == "" {
+		if d.Use {
+			mode = "ready"
+		} else {
+			mode = "disabled"
+		}
+	}
+
+	switch mode {
+	case "ready", "simulate", "disabled":
+		return mode
+	default:
+		return "disabled"
+	}
 }
 
 // Mission describes the current acquisition campaign metadata.

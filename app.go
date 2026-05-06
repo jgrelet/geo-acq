@@ -79,7 +79,7 @@ type MissionView struct {
 type DeviceConfigView struct {
 	Name      string `json:"name"`
 	Type      string `json:"type"`
-	Enabled   bool   `json:"enabled"`
+	Mode      string `json:"mode"`
 	Transport string `json:"transport"`
 	Port      string `json:"port"`
 	Sentence  string `json:"sentence"`
@@ -90,7 +90,7 @@ type DevicePanelState struct {
 	Type             string `json:"type"`
 	Transport        string `json:"transport"`
 	Port             string `json:"port"`
-	Enabled          bool   `json:"enabled"`
+	Mode             string `json:"mode"`
 	Status           string `json:"status"`
 	FrameCount       int    `json:"frameCount"`
 	LastSeen         string `json:"lastSeen"`
@@ -248,9 +248,9 @@ func (a *App) StartAcquisition() error {
 		return fmt.Errorf("a session is already running")
 	}
 
-	deviceNames := enabledDeviceNames(cfg)
+	deviceNames := activeDeviceNames(cfg)
 	if len(deviceNames) == 0 {
-		return a.fail(fmt.Errorf("no enabled devices found in configuration"))
+		return a.fail(fmt.Errorf("no active devices found in configuration"))
 	}
 
 	store, err := storage.OpenSQLite(cfg.Acq.File, cfg.Mission, path)
@@ -260,84 +260,50 @@ func (a *App) StartAcquisition() error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	session := &acquisitionSession{
-		mode:   "live",
+		mode:   sessionMode(cfg),
 		cancel: cancel,
 		done:   make(chan struct{}),
 		store:  store,
 	}
 
 	for _, name := range deviceNames {
-		dev := devices.New(name, cfg)
-		if err := dev.Connect(); err != nil {
-			session.cancel()
-			close(session.done)
-			a.cleanupSession(session)
-			return a.fail(fmt.Errorf("connect %s: %w", name, err))
-		}
-		session.devices = append(session.devices, dev)
-		a.updateDeviceStatus(name, "connected", "")
+		switch cfg.Devices[name].NormalizedMode() {
+		case "simulate":
+			dataCh, err := simulatedData(name)
+			if err != nil {
+				session.cancel()
+				close(session.done)
+				a.cleanupSession(session)
+				return a.fail(err)
+			}
+			a.updateDeviceStatus(name, "simulate", "")
+			go a.consumeSimulated(ctx, session, name, "simulate", configuredPort(cfg, name, cfg.Devices[name].Device), dataCh)
+		case "ready":
+			dev := devices.New(name, cfg)
+			if err := dev.Connect(); err != nil {
+				session.cancel()
+				close(session.done)
+				a.cleanupSession(session)
+				return a.fail(fmt.Errorf("connect %s: %w", name, err))
+			}
+			session.devices = append(session.devices, dev)
+			a.updateDeviceStatus(name, "connected", "")
 
-		transport := cfg.Devices[name].Device
-		port := dev.Port()
-		go a.consumeDevice(ctx, session, name, transport, port, dev.Data)
-		go a.consumeDeviceErrors(ctx, name, dev.Errors)
+			transport := cfg.Devices[name].Device
+			port := dev.Port()
+			go a.consumeDevice(ctx, session, name, transport, port, dev.Data)
+			go a.consumeDeviceErrors(ctx, name, dev.Errors)
+		}
 	}
 
 	a.mu.Lock()
 	a.session = session
 	a.running = true
-	a.mode = "live"
+	a.mode = session.mode
 	a.lastError = ""
 	a.mu.Unlock()
 
-	go a.waitForSession(ctx, session, "ready")
-	a.emitState()
-	return nil
-}
-
-func (a *App) StartDemo() error {
-	cfg, path, err := a.requireConfig()
-	if err != nil {
-		return err
-	}
-	if a.isRunning() {
-		return fmt.Errorf("a session is already running")
-	}
-
-	store, err := storage.OpenSQLite(cfg.Acq.File, cfg.Mission, path)
-	if err != nil {
-		return a.fail(err)
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	session := &acquisitionSession{
-		mode:   "demo",
-		cancel: cancel,
-		done:   make(chan struct{}),
-		store:  store,
-	}
-
-	a.mu.Lock()
-	a.session = session
-	a.running = true
-	a.mode = "demo"
-	a.lastError = ""
-	for _, name := range a.deviceOrder {
-		if state, ok := a.deviceStates[name]; ok {
-			state.Status = "demo"
-			state.LastError = ""
-		}
-	}
-	a.mu.Unlock()
-
-	if hasDevice(cfg, "gps") {
-		go a.consumeSimulated(ctx, session, "gps", configuredTransport(cfg, "gps", "demo"), configuredPort(cfg, "gps", configuredTransport(cfg, "gps", "demo")), simul.NewGps(1, 5.4, 36.0))
-	}
-	if hasDevice(cfg, "echosounder") {
-		go a.consumeSimulated(ctx, session, "echosounder", configuredTransport(cfg, "echosounder", "demo"), configuredPort(cfg, "echosounder", configuredTransport(cfg, "echosounder", "demo")), simul.NewEchoSounder(1500*time.Millisecond, 12.8))
-	}
-
-	go a.waitForSession(ctx, session, "ready")
+	go a.waitForSession(ctx, session)
 	a.emitState()
 	return nil
 }
@@ -351,7 +317,7 @@ func (a *App) StopAcquisition() error {
 		a.lastError = ""
 		for _, name := range a.deviceOrder {
 			if state, ok := a.deviceStates[name]; ok {
-				state.Status = defaultStatus(state.Enabled)
+				state.Status = defaultStatus(state.Mode)
 			}
 		}
 		a.mu.Unlock()
@@ -364,7 +330,7 @@ func (a *App) StopAcquisition() error {
 	a.mode = "idle"
 	for _, name := range a.deviceOrder {
 		if state, ok := a.deviceStates[name]; ok {
-			state.Status = defaultStatus(state.Enabled)
+			state.Status = defaultStatus(state.Mode)
 		}
 	}
 	a.mu.Unlock()
@@ -382,7 +348,7 @@ func (a *App) consumeDevice(ctx context.Context, session *acquisitionSession, na
 			return
 		case sentence, ok := <-dataCh:
 			if !ok {
-				a.updateDeviceStatus(name, defaultStatus(isEnabled(a, name)), "")
+				a.resetDeviceStatus(name)
 				return
 			}
 			a.handleFrame(session, FrameEvent{
@@ -391,7 +357,7 @@ func (a *App) consumeDevice(ctx context.Context, session *acquisitionSession, na
 				Transport:  transport,
 				Port:       port,
 				Payload:    sentence,
-				Mode:       session.mode,
+				Mode:       "live",
 			})
 		}
 	}
@@ -430,13 +396,13 @@ func (a *App) consumeSimulated(ctx context.Context, session *acquisitionSession,
 				Transport:  transport,
 				Port:       port,
 				Payload:    sentence,
-				Mode:       session.mode,
+				Mode:       "simulate",
 			})
 		}
 	}
 }
 
-func (a *App) waitForSession(ctx context.Context, session *acquisitionSession, idleStatus string) {
+func (a *App) waitForSession(ctx context.Context, session *acquisitionSession) {
 	<-ctx.Done()
 	close(session.done)
 }
@@ -469,8 +435,8 @@ func (a *App) handleFrame(session *acquisitionSession, frame FrameEvent) {
 	panel, ok := a.deviceStates[frame.DeviceName]
 	if ok {
 		panel.Status = "streaming"
-		if frame.Mode == "demo" {
-			panel.Status = "demo"
+		if frame.Mode == "simulate" {
+			panel.Status = "simulate"
 		}
 		panel.FrameCount++
 		panel.LastSeen = frame.ReceivedAt
@@ -569,6 +535,14 @@ func (a *App) updateDeviceStatus(name string, status string, lastError string) {
 	}
 }
 
+func (a *App) resetDeviceStatus(name string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if state, ok := a.deviceStates[name]; ok {
+		state.Status = defaultStatus(state.Mode)
+	}
+}
+
 func (a *App) snapshotConfigLocked() ConfigView {
 	devicesCfg := make([]DeviceConfigView, 0, len(a.deviceOrder))
 	for _, name := range a.deviceOrder {
@@ -579,7 +553,7 @@ func (a *App) snapshotConfigLocked() ConfigView {
 		devicesCfg = append(devicesCfg, DeviceConfigView{
 			Name:      name,
 			Type:      deviceCfg.Type,
-			Enabled:   deviceCfg.Use,
+			Mode:      deviceCfg.NormalizedMode(),
 			Transport: deviceCfg.Device,
 			Port:      configuredPort(a.cfg, name, deviceCfg.Device),
 			Sentence:  deviceCfg.Sentence,
@@ -617,20 +591,31 @@ func buildDeviceStates(cfg config.Config, names []string) map[string]*DevicePane
 		out[name] = &DevicePanelState{
 			Name:      name,
 			Type:      deviceCfg.Type,
-			Transport: deviceCfg.Device,
+			Transport: displayTransport(deviceCfg),
 			Port:      configuredPort(cfg, name, deviceCfg.Device),
-			Enabled:   deviceCfg.Use,
-			Status:    defaultStatus(deviceCfg.Use),
+			Mode:      deviceCfg.NormalizedMode(),
+			Status:    defaultStatus(deviceCfg.NormalizedMode()),
 		}
 	}
 	return out
 }
 
-func defaultStatus(enabled bool) string {
-	if enabled {
+func defaultStatus(mode string) string {
+	switch mode {
+	case "simulate":
+		return "simulate"
+	case "ready":
 		return "ready"
+	default:
+		return "disabled"
 	}
-	return "disabled"
+}
+
+func displayTransport(deviceCfg config.Device) string {
+	if deviceCfg.NormalizedMode() == "simulate" {
+		return "simulate"
+	}
+	return deviceCfg.Device
 }
 
 func configuredPort(cfg config.Config, name string, transport string) string {
@@ -663,10 +648,10 @@ func sortedDeviceNames(cfg config.Config) []string {
 	return names
 }
 
-func enabledDeviceNames(cfg config.Config) []string {
+func activeDeviceNames(cfg config.Config) []string {
 	names := make([]string, 0, len(cfg.Devices))
 	for _, name := range sortedDeviceNames(cfg) {
-		if cfg.Devices[name].Use {
+		if cfg.Devices[name].NormalizedMode() != "disabled" {
 			names = append(names, name)
 		}
 	}
@@ -802,11 +787,37 @@ func decodeJSONObject(raw string) (map[string]interface{}, bool) {
 	return payload, true
 }
 
-func isEnabled(a *App, name string) bool {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	state, ok := a.deviceStates[name]
-	return ok && state.Enabled
+func sessionMode(cfg config.Config) string {
+	hasReady := false
+	hasSimulate := false
+	for _, name := range sortedDeviceNames(cfg) {
+		switch cfg.Devices[name].NormalizedMode() {
+		case "ready":
+			hasReady = true
+		case "simulate":
+			hasSimulate = true
+		}
+	}
+
+	switch {
+	case hasReady && hasSimulate:
+		return "mixed"
+	case hasSimulate:
+		return "simulate"
+	default:
+		return "live"
+	}
+}
+
+func simulatedData(name string) (<-chan string, error) {
+	switch name {
+	case "gps":
+		return simul.NewGps(1, 5.4, 36.0), nil
+	case "echosounder":
+		return simul.NewEchoSounder(1500*time.Millisecond, 12.8), nil
+	default:
+		return nil, fmt.Errorf("simulate mode is not supported for %s", name)
+	}
 }
 
 func formatTerminalFrame(frame FrameEvent) string {

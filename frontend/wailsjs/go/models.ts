@@ -35,7 +35,7 @@ export namespace main {
 	    type: string;
 	    transport: string;
 	    port: string;
-	    enabled: boolean;
+	    mode: string;
 	    status: string;
 	    frameCount: number;
 	    lastSeen: string;
@@ -54,7 +54,7 @@ export namespace main {
 	        this.type = source["type"];
 	        this.transport = source["transport"];
 	        this.port = source["port"];
-	        this.enabled = source["enabled"];
+	        this.mode = source["mode"];
 	        this.status = source["status"];
 	        this.frameCount = source["frameCount"];
 	        this.lastSeen = source["lastSeen"];
@@ -67,7 +67,7 @@ export namespace main {
 	export class DeviceConfigView {
 	    name: string;
 	    type: string;
-	    enabled: boolean;
+	    mode: string;
 	    transport: string;
 	    port: string;
 	    sentence: string;
@@ -80,7 +80,7 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
 	        this.type = source["type"];
-	        this.enabled = source["enabled"];
+	        this.mode = source["mode"];
 	        this.transport = source["transport"];
 	        this.port = source["port"];
 	        this.sentence = source["sentence"];

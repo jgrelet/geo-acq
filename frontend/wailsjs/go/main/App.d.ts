@@ -14,6 +14,4 @@ export function SelectConfigFile():Promise<string>;
 
 export function StartAcquisition():Promise<void>;
 
-export function StartDemo():Promise<void>;
-
 export function StopAcquisition():Promise<void>;

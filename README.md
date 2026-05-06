@@ -84,8 +84,7 @@ What it currently provides:
 - tabbed views for configuration, device panels, raw terminal frames, and available inputs
 - separate device panels for configured devices
 - live raw-frame terminal view with source filtering
-- live acquisition mode using configured devices
-- demo mode using the existing GPS and echosounder simulators
+- mixed acquisition mode using configured live and simulated devices
 
 Build the desktop binary:
 
@@ -125,16 +124,15 @@ The current Wails desktop prototype is organised as follows:
   - `Edit config`
   - `Refresh ports`
   - `Start`
-  - `Start demo`
   - `Stop`
 - a central tabbed area with:
-  - `Current config`
+  - `Configuration`
   - `Device panels`
   - `Terminal raw frames`
   - `Available inputs`
 
 The default operational tab is `Device panels`.
-When `Start` or `Start demo` is used, the interface stays focused on the device view.
+When `Start` is used, the interface stays focused on the device view.
 
 ### Config workflow in the Wails GUI
 
@@ -157,12 +155,9 @@ Each panel shows:
 - device name
 - transport and configured port
 - current status
-- device type
-- whether the device is enabled
 - number of frames seen
-- last sentence type
-- last seen timestamp
-- decoded payload rendered from JSON when available
+- configured sentence filter
+- decoded values rendered as operator-friendly name/value pairs when available
 
 The raw frame is no longer repeated in the device card because it is already visible in the terminal tab.
 
@@ -193,28 +188,62 @@ The current filter values are built from the known runtime sources, for example:
 The `Available inputs` tab currently lists the detected serial ports exposed by the runtime.
 This is mainly a quick operator check to confirm that expected serial inputs are visible before starting acquisition.
 
-### Live mode in the Wails GUI
+### Start mode in the Wails GUI
 
 When `Start` is used:
 
 1. the current configuration is validated and loaded if needed
-2. enabled devices are opened using the configured transport
-3. frames are read from live devices
-4. each frame is timestamped
-5. each frame is decoded when possible
-6. the raw frame plus decoded JSON are stored in SQLite
-7. the GUI is updated through Wails runtime events
+2. each device mode is read from `[devices].mode`
+3. devices in `ready` mode are opened using the configured transport
+4. devices in `simulate` mode are started from the built-in simulator logic
+5. devices in `disabled` mode are ignored
+6. frames are read from active devices
+7. each frame is timestamped
+8. each frame is decoded when possible
+9. the raw frame plus decoded JSON are stored in SQLite
+10. the GUI is updated through Wails runtime events
 
-### Demo mode in the Wails GUI
+The session badge can therefore show a mixed session with both live and simulated devices.
 
-When `Start demo` is used:
+### Device mode values
 
-1. a normal SQLite acquisition session is still created
-2. live devices are not opened
-3. simulated GPS and echosounder frames are generated from existing simulator logic
-4. these frames follow the same GUI update and storage pipeline as live frames
+Each device now supports:
 
-This makes demo mode useful for interface testing without connected instruments.
+- `mode = "ready"`: use the configured serial or UDP transport
+- `mode = "simulate"`: use the built-in simulator for this device only
+- `mode = "disabled"`: do not start this device
+
+For example:
+
+```toml
+[devices.gps]
+type = "nmea"
+mode = "ready"
+device = "serial"
+sentence = "GGA,RMC"
+
+[devices.echosounder]
+type = "nmea"
+mode = "simulate"
+device = "serial"
+sentence = "DBT"
+```
+
+### Terminal view behaviour
+
+The terminal tab stays active for both live and simulated devices.
+
+It currently shows:
+
+- the latest raw terminal lines produced from incoming frames
+- timestamps
+- device name
+- transport
+- port
+- sentence type
+- raw NMEA payload
+
+Simulated devices appear with `simulate` as transport, and they can still be filtered from the source selector using the usual `transport:port` format.
 
 ### Current implementation limits
 
@@ -280,6 +309,7 @@ You can always override it with `-config`:
 Each device is configured with:
 
 - a logical section in `[devices]`
+- a mode: `ready`, `simulate`, or `disabled`
 - a transport type: `serial` or `udp`
 - a matching section in `[serials]` or `[udp]`
 
@@ -310,14 +340,15 @@ Offline export parameters are configured in the `[export]` section:
 The current processing pipeline is intentionally simple:
 
 1. A device is created from the TOML configuration.
-2. The acquisition runtime opens every enabled device from `[devices]`.
-3. Each device opens either a serial port or a UDP socket.
-4. Incoming bytes are read line by line until `LF`.
-5. Trailing `CRLF` is removed.
-6. Each complete NMEA sentence is pushed to the device `Data` channel.
-7. `geo-acq` timestamps the sentence at reception time.
-8. The raw sentence is stored in SQLite with mission and session metadata.
-9. If `global.echo = true`, the sentence is also printed to stdout.
+2. The acquisition runtime starts every active device from `[devices]`.
+3. A `ready` device opens either a serial port or a UDP socket.
+4. A `simulate` device uses the built-in simulator for that instrument.
+5. Incoming bytes are read line by line until `LF`.
+6. Trailing `CRLF` is removed.
+7. Each complete NMEA sentence is pushed to the device `Data` channel.
+8. `geo-acq` timestamps the sentence at reception time.
+9. The raw sentence is stored in SQLite with mission and session metadata.
+10. If `global.echo = true`, the sentence is also printed to stdout.
 
 In practice, the data path is:
 
@@ -331,7 +362,7 @@ In practice, the data path is:
 
 At the moment, `geo-acq`:
 
-- reads raw NMEA sentences from all enabled configured devices
+- reads raw NMEA sentences from all active configured devices
 - keeps sentence boundaries intact
 - timestamps frames on reception
 - stores them in SQLite as append-only raw records
@@ -431,7 +462,7 @@ The generated TSV file contains:
 
 ## Acquisition mode
 
-The acquisition binary reads incoming NMEA sentences from every enabled device and stores them in SQLite.
+The acquisition binary reads incoming NMEA sentences from every active device and stores them in SQLite.
 
 ### Serial acquisition
 

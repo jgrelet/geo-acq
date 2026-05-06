@@ -15,12 +15,12 @@ file           = "geo-acq-udp-listener.sqlite"
 
 	[devices.gps]
 	type           = "nmea"
-	use            = true
+	mode           = "ready"
 	device         = "udp"
 
 	[devices.echosounder]
 	type           = "nmea"
-	use            = true
+	mode           = "ready"
 	device         = "udp"
 
 [serials]
