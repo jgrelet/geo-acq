@@ -1,5 +1,8 @@
 # geo-acq
 
+[![CI](https://github.com/jgrelet/geo-acq/actions/workflows/ci.yml/badge.svg)](https://github.com/jgrelet/geo-acq/actions/workflows/ci.yml)
+[![Release](https://github.com/jgrelet/geo-acq/actions/workflows/release.yml/badge.svg)](https://github.com/jgrelet/geo-acq/actions/workflows/release.yml)
+
 `geo-acq` is a Go application for acquiring NMEA data from marine instruments such as:
 
 - GPS
