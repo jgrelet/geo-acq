@@ -67,6 +67,18 @@ make cross-build
 
 Build outputs are written to `bin/` and release artifacts to `dist/`.
 
+## GitHub release automation
+
+Publishing a GitHub release triggers `.github/workflows/release.yml`.
+The workflow builds the CLI `cmd/geo-acq` and the Wails GUI `build/bin/geo-acq-gui`
+for:
+
+- `linux/amd64`
+- `linux/arm64`
+- `windows/amd64`
+
+Generated binaries are uploaded to the GitHub release as artifacts.
+
 ## Developer notes
 
 - `docs/git-worktree-memo.md`: short memo for the current `git worktree` workflow used in this project
