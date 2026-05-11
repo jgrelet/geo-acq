@@ -79,6 +79,10 @@ for:
 
 Generated binaries are uploaded to the GitHub release as artifacts.
 
+Regular validation for `push` and `pull_request` lives in
+`.github/workflows/ci.yml`. It runs `go test ./...`, checks the CLI cross-build
+targets, and validates a Linux Wails GUI build.
+
 ## Developer notes
 
 - `docs/git-worktree-memo.md`: short memo for the current `git worktree` workflow used in this project
