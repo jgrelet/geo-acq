@@ -4,6 +4,11 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Git tag to publish, for example v0.1.0
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -49,11 +54,12 @@ jobs:
             -o "dist/geo-acq-${GOOS}-${GOARCH}${ext}" \
             ./cmd/geo-acq
 
-      - name: Upload CLI assets to GitHub release
-        if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
+      - name: Upload CLI workflow artifact
+        uses: actions/upload-artifact@v4
         with:
-          files: dist/*
+          name: geo-acq-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/geo-acq-${{ matrix.goos }}-${{ matrix.goarch }}*
+          if-no-files-found: error
 
   build-gui:
     name: Build GUI ${{ matrix.goos }}-${{ matrix.goarch }}
@@ -120,8 +126,32 @@ jobs:
           fi
           cp "build/bin/geo-acq-gui${ext}" "dist/geo-acq-gui-${GOOS}-${GOARCH}${ext}"
 
-      - name: Upload GUI assets to GitHub release
-        if: github.event_name == 'release'
+      - name: Upload GUI workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: geo-acq-gui-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/geo-acq-gui-${{ matrix.goos }}-${{ matrix.goarch }}*
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish release
+    runs-on: ubuntu-latest
+    needs:
+      - build-cli
+      - build-gui
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: geo-acq*
+          merge-multiple: true
+
+      - name: Publish assets to GitHub release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.event.release.tag_name }}
+          target_commitish: ${{ github.ref_name }}
           files: dist/*
+          generate_release_notes: true

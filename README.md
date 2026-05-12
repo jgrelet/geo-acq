@@ -72,15 +72,17 @@ Build outputs are written to `bin/` and release artifacts to `dist/`.
 
 ## GitHub release automation
 
-Publishing a GitHub release triggers `.github/workflows/release.yml`.
-The workflow builds the CLI `cmd/geo-acq` and the Wails GUI `build/bin/geo-acq-gui`
-for:
+Publishing a GitHub release, or manually running `.github/workflows/release.yml`
+from the GitHub Actions UI, builds the CLI `cmd/geo-acq` and the Wails GUI
+`build/bin/geo-acq-gui` for:
 
 - `linux/amd64`
 - `linux/arm64`
 - `windows/amd64`
 
-Generated binaries are uploaded to the GitHub release as artifacts.
+When started manually, provide the existing Git tag to publish, for example
+`v0.1.0`. The workflow creates or updates the corresponding GitHub release and
+uploads the generated binaries to it.
 
 Regular validation for `push` and `pull_request` lives in
 `.github/workflows/ci.yml`. It runs `go test ./...`, checks the CLI cross-build
