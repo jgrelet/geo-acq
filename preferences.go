@@ -28,21 +28,40 @@ func startupConfigPath() string {
 }
 
 func loadLastConfigPath() (string, error) {
-	path, err := preferencesFilePath()
+	prefs, err := loadPreferences()
 	if err != nil {
 		return "", err
+	}
+	return strings.TrimSpace(prefs.LastConfigPath), nil
+}
+
+func loadPreferences() (preferences, error) {
+	path, err := preferencesFilePath()
+	if err != nil {
+		return preferences{}, err
 	}
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return "", err
+		return preferences{}, err
 	}
 
 	var prefs preferences
 	if err := json.Unmarshal(data, &prefs); err != nil {
-		return "", fmt.Errorf("decode preferences: %w", err)
+		return preferences{}, fmt.Errorf("decode preferences: %w", err)
 	}
-	return strings.TrimSpace(prefs.LastConfigPath), nil
+	return prefs, nil
+}
+
+func loadPreferencesOrDefault() (preferences, error) {
+	prefs, err := loadPreferences()
+	if err == nil {
+		return prefs, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return preferences{}, nil
+	}
+	return preferences{}, err
 }
 
 func saveLastConfigPath(path string) error {
@@ -51,6 +70,15 @@ func saveLastConfigPath(path string) error {
 		return nil
 	}
 
+	prefs, err := loadPreferencesOrDefault()
+	if err != nil {
+		return err
+	}
+	prefs.LastConfigPath = path
+	return savePreferences(prefs)
+}
+
+func savePreferences(prefs preferences) error {
 	prefsPath, err := preferencesFilePath()
 	if err != nil {
 		return err
@@ -59,7 +87,7 @@ func saveLastConfigPath(path string) error {
 		return fmt.Errorf("create preferences directory: %w", err)
 	}
 
-	data, err := json.MarshalIndent(preferences{LastConfigPath: path}, "", "  ")
+	data, err := json.MarshalIndent(prefs, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode preferences: %w", err)
 	}

@@ -34,7 +34,6 @@ type App struct {
 	cfg            config.Config
 	deviceOrder    []string
 	deviceStates   map[string]*DevicePanelState
-	runtimeModes   map[string]string
 	terminalFrames []FrameEvent
 	serialPorts    []string
 	running        bool
@@ -119,7 +118,6 @@ func NewApp() *App {
 	return &App{
 		mode:         "idle",
 		deviceStates: make(map[string]*DevicePanelState),
-		runtimeModes: make(map[string]string),
 	}
 }
 
@@ -188,7 +186,6 @@ func (a *App) LoadConfig(path string) (AppState, error) {
 	a.cfg = cfg
 	a.deviceOrder = deviceOrder
 	a.deviceStates = deviceStates
-	a.runtimeModes = make(map[string]string)
 	a.serialPorts = serialPorts
 	a.mode = "idle"
 	a.lastError = ""
@@ -237,17 +234,44 @@ func (a *App) ToggleDeviceSimulation(name string) (AppState, error) {
 	}
 
 	currentMode := a.effectiveDeviceModeLocked(name)
+	newMode := ""
 	switch currentMode {
 	case "disabled":
-		a.runtimeModes[name] = "simulate"
-		state.Mode = "simulate"
+		newMode = "simulate"
 	case "simulate":
-		delete(a.runtimeModes, name)
-		state.Mode = configModeOrDisabled(a.cfg, name)
+		newMode = "disabled"
 	default:
+		a.mu.Unlock()
 		return a.GetState(), nil
 	}
 
+	configPath := a.configPath
+	if configPath == "" {
+		configPath = config.DefaultFile()
+	}
+	raw, err := updateDeviceModeInTOML(a.configRaw, name, newMode)
+	if err != nil {
+		a.mu.Unlock()
+		return a.GetState(), err
+	}
+	var cfg config.Config
+	if _, err := toml.Decode(raw, &cfg); err != nil {
+		a.mu.Unlock()
+		return a.GetState(), fmt.Errorf("updated TOML is invalid: %w", err)
+	}
+	if err := os.WriteFile(configPath, []byte(raw), 0o644); err != nil {
+		a.mu.Unlock()
+		return a.GetState(), fmt.Errorf("write config %s: %w", configPath, err)
+	}
+	cfg, err = config.Load(configPath)
+	if err != nil {
+		a.mu.Unlock()
+		return a.GetState(), err
+	}
+
+	a.configRaw = raw
+	a.cfg = cfg
+	state.Mode = newMode
 	state.Transport = displayTransportForMode(a.cfg.Devices[name], state.Mode)
 	state.Status = defaultStatus(state.Mode)
 	state.FrameCount = 0
@@ -259,6 +283,73 @@ func (a *App) ToggleDeviceSimulation(name string) (AppState, error) {
 
 	a.mu.Unlock()
 	return a.GetState(), nil
+}
+
+func updateDeviceModeInTOML(raw string, name string, mode string) (string, error) {
+	section := "[devices." + name + "]"
+	lines := strings.Split(raw, "\n")
+	hasTrailingNewline := strings.HasSuffix(raw, "\n")
+	inSection := false
+	foundSection := false
+	foundMode := false
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+			if inSection && !foundMode {
+				lines = insertLine(lines, insertionIndexBeforeBlankSeparator(lines, i), "\t"+deviceModeLine(mode))
+				return joinTOMLLines(lines, hasTrailingNewline), nil
+			}
+			inSection = trimmed == section
+			foundSection = foundSection || inSection
+			continue
+		}
+		if !inSection {
+			continue
+		}
+		key, _, ok := strings.Cut(trimmed, "=")
+		if !ok || strings.TrimSpace(key) != "mode" {
+			continue
+		}
+		indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+		lines[i] = indent + deviceModeLine(mode)
+		foundMode = true
+		break
+	}
+
+	if !foundSection {
+		return "", fmt.Errorf("device %q section not found in TOML", name)
+	}
+	if !foundMode {
+		lines = append(lines, "\t"+deviceModeLine(mode))
+	}
+	return joinTOMLLines(lines, hasTrailingNewline), nil
+}
+
+func deviceModeLine(mode string) string {
+	return fmt.Sprintf("mode           = %q", mode)
+}
+
+func insertLine(lines []string, index int, value string) []string {
+	lines = append(lines, "")
+	copy(lines[index+1:], lines[index:])
+	lines[index] = value
+	return lines
+}
+
+func insertionIndexBeforeBlankSeparator(lines []string, index int) int {
+	for index > 0 && strings.TrimSpace(lines[index-1]) == "" {
+		index--
+	}
+	return index
+}
+
+func joinTOMLLines(lines []string, hasTrailingNewline bool) string {
+	raw := strings.Join(lines, "\n")
+	if hasTrailingNewline && !strings.HasSuffix(raw, "\n") {
+		raw += "\n"
+	}
+	return raw
 }
 
 func (a *App) SelectConfigFile() (string, error) {
@@ -917,9 +1008,6 @@ func (a *App) sessionModeLocked() string {
 }
 
 func (a *App) effectiveDeviceModeLocked(name string) string {
-	if mode, ok := a.runtimeModes[name]; ok && mode != "" {
-		return mode
-	}
 	return configModeOrDisabled(a.cfg, name)
 }
 

@@ -26,9 +26,11 @@ vars:
   WAILS_BIN:
     sh: |
       if [ "{{OS}}" = "windows" ]; then
-        printf "%s/go/bin/wails.exe" "$USERPROFILE"
+        gopath="$(go env GOPATH)"
+        gopath="$(printf "%s" "$gopath" | sed 's#\\#/#g')"
+        printf "%s/bin/wails.exe" "$gopath"
       else
-        printf "%s/go/bin/wails" "$HOME"
+        printf "%s/bin/wails" "$(go env GOPATH)"
       fi
   GOCACHE: '{{default (printf "%s/.gocache" .ROOT_DIR) .GOCACHE}}'
   GOMODCACHE: '{{default (printf "%s/.gomodcache" .ROOT_DIR) .GOMODCACHE}}'

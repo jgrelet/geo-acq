@@ -364,7 +364,7 @@ With this configuration:
 - `raw_path` optionally overrides the raw database path
 - `processed_path` optionally overrides the decoded database path
 
-When `raw_path` or `processed_path` is empty, the runtime derives the file name from `mission.name` and writes it next to the TOML file. Relative custom paths are resolved from the TOML directory, while absolute paths are used as-is.
+When `raw_path` or `processed_path` is empty, the runtime derives the file name from `mission.name` and writes it next to the TOML file. Relative custom paths are resolved from the TOML directory, while absolute paths are used as-is. If a custom path has no file extension, points to an existing directory, or ends with `/`, the runtime writes the mission-derived file inside that directory.
 
 Example:
 
@@ -377,6 +377,18 @@ processed_path = "db/measurements.sqlite"
 ```
 
 For `examples/udp-listener.toml`, these paths resolve to `examples/db/navigation.sqlite` and `examples/db/measurements.sqlite`.
+
+To choose only the output directory while keeping generated file names:
+
+```toml
+[backup]
+raw            = true
+processed      = true
+raw_path       = "examples/"
+processed_path = "examples/"
+```
+
+With mission `dev`, this produces `examples/dev-raw.sqlite` and `examples/dev-data.sqlite`.
 
 The export binary is configured directly from the command line rather than through TOML.
 

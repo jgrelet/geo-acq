@@ -11,8 +11,8 @@ log            = "geo-acq.log"
 [backup]
 raw            = true
 processed      = true
-raw_path       = ""
-processed_path = ""
+raw_path       = "examples"
+processed_path = "examples"
 
 [devices]
 

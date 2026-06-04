@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -154,12 +155,28 @@ func (c Config) ProcessedBackupPath(configFile string) string {
 func backupPath(configFile string, configuredPath string, defaultName string) string {
 	configuredPath = strings.TrimSpace(configuredPath)
 	if configuredPath != "" {
-		if filepath.IsAbs(configuredPath) {
-			return filepath.Clean(configuredPath)
+		path := configuredPath
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(configDir(configFile), path)
 		}
-		return filepath.Join(configDir(configFile), configuredPath)
+		path = filepath.Clean(path)
+		if backupPathIsDir(configuredPath, path) {
+			return filepath.Join(path, defaultName)
+		}
+		return path
 	}
 	return filepath.Join(configDir(configFile), defaultName)
+}
+
+func backupPathIsDir(configuredPath string, resolvedPath string) bool {
+	if strings.HasSuffix(configuredPath, "/") || strings.HasSuffix(configuredPath, "\\") {
+		return true
+	}
+	if filepath.Ext(configuredPath) == "" {
+		return true
+	}
+	info, err := os.Stat(resolvedPath)
+	return err == nil && info.IsDir()
 }
 
 func configDir(configFile string) string {

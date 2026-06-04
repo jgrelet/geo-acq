@@ -14,10 +14,11 @@ GO ?= go
 WAILS_VERSION ?= v2.12.0
 WAILS_PKG ?= github.com/wailsapp/wails/v2/cmd/wails
 ifeq ($(OS),Windows_NT)
-WAILS ?= $(USERPROFILE)/go/bin/wails.exe
+GOPATH_DIR := $(shell go env GOPATH)
+WAILS ?= $(subst \,/,$(GOPATH_DIR))/bin/wails.exe
 WAILS_BUILD_ARGS :=
 else
-WAILS ?= $(HOME)/go/bin/wails
+WAILS ?= $(shell printf "%s/bin/wails" "$$(go env GOPATH)")
 WAILS_BUILD_ARGS := $(shell if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists webkit2gtk-4.1 && ! pkg-config --exists webkit2gtk-4.0; then printf "%s" "-tags webkit2_41"; fi)
 endif
 
