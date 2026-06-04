@@ -4,6 +4,8 @@ import {main} from '../models';
 
 export function GetState():Promise<main.AppState>;
 
+export function CreateDefaultConfig():Promise<main.AppState>;
+
 export function LoadConfig(arg1:string):Promise<main.AppState>;
 
 export function RefreshSerialPorts():Promise<Array<string>>;

@@ -3,6 +3,8 @@ package config
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/BurntSushi/toml"
 )
 
 func TestBackupPathDefaultsToMissionNameBesideConfig(t *testing.T) {
@@ -76,5 +78,15 @@ func TestBackupPathUsesCustomAbsolutePathAsIs(t *testing.T) {
 
 	if got := cfg.RawBackupPath(filepath.Join("examples", "listener.toml")); got != filepath.Clean(rawPath) {
 		t.Fatalf("RawBackupPath() = %q, want %q", got, rawPath)
+	}
+}
+
+func TestDefaultContentIsValidTOML(t *testing.T) {
+	var cfg Config
+	if _, err := toml.Decode(DefaultContent(), &cfg); err != nil {
+		t.Fatalf("DefaultContent() is invalid TOML: %v", err)
+	}
+	if cfg.Mission.Name == "" {
+		t.Fatalf("DefaultContent() should include mission metadata")
 	}
 }

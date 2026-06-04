@@ -161,9 +161,10 @@ Current configuration handling works like this:
 
 1. The path field contains the current TOML path.
 2. `Choose file` opens a native file dialog restricted to `*.toml`.
-3. `Load config` reads the selected file and refreshes the GUI state.
-4. `Edit config` opens a full-screen TOML editor overlay.
-5. `Validate config` writes the edited TOML back to the current file and reloads it.
+3. `Create default` writes a starter TOML file in the user configuration directory when no project TOML is available, then loads it.
+4. `Load config` reads the selected file and refreshes the GUI state.
+5. `Edit config` opens a full-screen TOML editor overlay.
+6. `Validate config` writes the edited TOML back to the current file and reloads it.
 
 The GUI does not yet expose structured per-field forms for mission, devices, serial ports, or UDP settings.
 At the moment, configuration editing is done on the raw TOML file as text.

@@ -6,6 +6,10 @@ export function GetState() {
   return window['go']['main']['App']['GetState']();
 }
 
+export function CreateDefaultConfig() {
+  return window['go']['main']['App']['CreateDefaultConfig']();
+}
+
 export function LoadConfig(arg1) {
   return window['go']['main']['App']['LoadConfig'](arg1);
 }

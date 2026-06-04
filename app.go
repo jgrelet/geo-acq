@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -218,6 +219,30 @@ func (a *App) SaveConfig(raw string) (AppState, error) {
 		return a.GetState(), fmt.Errorf("write config %s: %w", path, err)
 	}
 
+	return a.LoadConfig(path)
+}
+
+func (a *App) CreateDefaultConfig() (AppState, error) {
+	if a.isRunning() {
+		return a.GetState(), fmt.Errorf("stop the current session before creating a config")
+	}
+
+	path, err := config.DefaultUserFile()
+	if err != nil {
+		return a.GetState(), err
+	}
+	if _, err := os.Stat(path); err == nil {
+		return a.LoadConfig(path)
+	} else if !os.IsNotExist(err) {
+		return a.GetState(), fmt.Errorf("inspect config %s: %w", path, err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return a.GetState(), fmt.Errorf("create config directory: %w", err)
+	}
+	if err := os.WriteFile(path, []byte(config.DefaultContent()), 0o644); err != nil {
+		return a.GetState(), fmt.Errorf("write default config %s: %w", path, err)
+	}
 	return a.LoadConfig(path)
 }
 

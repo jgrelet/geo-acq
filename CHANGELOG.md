@@ -13,6 +13,7 @@ The format is based on Keep a Changelog, and this project follows semantic versi
 - Ignore SQLite WAL and shared-memory sidecar files in Git.
 - Support optional custom SQLite backup paths in `[backup]` with `raw_path` and `processed_path`.
 - Treat backup paths that point to directories as output directories for generated SQLite file names.
+- Add a GUI action to create and load a default TOML configuration in the user configuration directory.
 
 ### Changed
 

@@ -3,6 +3,7 @@ import "./app.css";
 
 import { EventsOn } from "../wailsjs/runtime/runtime.js";
 import {
+  CreateDefaultConfig,
   GetState,
   LoadConfig,
   RefreshSerialPorts,
@@ -61,6 +62,7 @@ document.querySelector("#app").innerHTML = `
               </label>
               <div class="toolbar-actions">
                 <button id="browse-config" class="btn btn-secondary">Choose file</button>
+                <button id="create-default-config" class="btn btn-secondary">Create default</button>
                 <button id="load-config" class="btn btn-secondary">Load config</button>
                 <button id="edit-config" class="btn btn-secondary">Edit config</button>
                 <button id="refresh-ports" class="btn btn-secondary">Refresh ports</button>
@@ -229,6 +231,13 @@ elements.devicesGrid.addEventListener("click", async (event) => {
 
   await safely(async () => {
     const snapshot = await ToggleDeviceSimulation(deviceToggle);
+    applyState(snapshot);
+  });
+});
+
+document.getElementById("create-default-config").addEventListener("click", async () => {
+  await safely(async () => {
+    const snapshot = await CreateDefaultConfig();
     applyState(snapshot);
   });
 });
