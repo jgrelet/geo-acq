@@ -11,6 +11,8 @@ log            = "geo-acq-udp-sender.log"
 [backup]
 raw            = true
 processed      = false
+raw_path       = ""
+processed_path = ""
 
 [devices]
 

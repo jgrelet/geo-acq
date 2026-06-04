@@ -351,14 +351,32 @@ Example:
 
 ```toml
 [backup]
-raw       = true
-processed = true
+raw            = true
+processed      = true
+raw_path       = ""
+processed_path = ""
 ```
 
 With this configuration:
 
 - `raw = true` enables the append-only raw acquisition database `<mission>-raw.sqlite`
 - `processed = true` enables the decoded acquisition database `<mission>-data.sqlite`
+- `raw_path` optionally overrides the raw database path
+- `processed_path` optionally overrides the decoded database path
+
+When `raw_path` or `processed_path` is empty, the runtime derives the file name from `mission.name` and writes it next to the TOML file. Relative custom paths are resolved from the TOML directory, while absolute paths are used as-is.
+
+Example:
+
+```toml
+[backup]
+raw            = true
+processed      = true
+raw_path       = "db/navigation.sqlite"
+processed_path = "db/measurements.sqlite"
+```
+
+For `examples/udp-listener.toml`, these paths resolve to `examples/db/navigation.sqlite` and `examples/db/measurements.sqlite`.
 
 The export binary is configured directly from the command line rather than through TOML.
 
@@ -400,7 +418,7 @@ There is not yet a higher-level processing stage that merges devices together or
 
 ### What is stored today
 
-When `backup.raw = true`, the runtime persists acquisition data in a mission-derived SQLite database named `<mission>-raw.sqlite`.
+When `backup.raw = true`, the runtime persists acquisition data in a mission-derived SQLite database named `<mission>-raw.sqlite`, unless `backup.raw_path` is set.
 
 The storage model is append-only and centered on raw frames:
 
@@ -417,7 +435,7 @@ Each raw frame stores:
 - transport type
 - raw NMEA payload
 
-When `backup.processed = true`, the runtime also persists decoded acquisition data in a mission-derived SQLite database named `<mission>-data.sqlite`.
+When `backup.processed = true`, the runtime also persists decoded acquisition data in a mission-derived SQLite database named `<mission>-data.sqlite`, unless `backup.processed_path` is set.
 
 The current processed schema is organized by sentence type:
 

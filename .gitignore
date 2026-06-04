@@ -9,6 +9,8 @@ nmea-proto-*
 *.json
 *.log
 *.sqlite
+*.sqlite-shm
+*.sqlite-wal
 *.swp
 *.csv
 *.tsv

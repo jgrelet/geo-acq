@@ -70,8 +70,10 @@ type Export struct {
 
 // Backup describes acquisition persistence policy.
 type Backup struct {
-	Raw       bool `toml:"raw"`
-	Processed bool `toml:"processed"`
+	Raw           bool   `toml:"raw"`
+	Processed     bool   `toml:"processed"`
+	RawPath       string `toml:"raw_path"`
+	ProcessedPath string `toml:"processed_path"`
 }
 
 // Config is the Go representation of toml file
@@ -138,12 +140,7 @@ func (c Config) RawBackupPath(configFile string) string {
 	if !c.RawBackupEnabled() {
 		return ""
 	}
-
-	dir := filepath.Dir(configFile)
-	if dir == "" {
-		dir = "."
-	}
-	return filepath.Join(dir, backupBaseName(c.Mission.Name)+"-raw.sqlite")
+	return backupPath(configFile, c.Backup.RawPath, backupBaseName(c.Mission.Name)+"-raw.sqlite")
 }
 
 // ProcessedBackupPath returns the processed SQLite path for the current mission.
@@ -151,12 +148,26 @@ func (c Config) ProcessedBackupPath(configFile string) string {
 	if !c.Backup.Processed {
 		return ""
 	}
+	return backupPath(configFile, c.Backup.ProcessedPath, backupBaseName(c.Mission.Name)+"-data.sqlite")
+}
 
+func backupPath(configFile string, configuredPath string, defaultName string) string {
+	configuredPath = strings.TrimSpace(configuredPath)
+	if configuredPath != "" {
+		if filepath.IsAbs(configuredPath) {
+			return filepath.Clean(configuredPath)
+		}
+		return filepath.Join(configDir(configFile), configuredPath)
+	}
+	return filepath.Join(configDir(configFile), defaultName)
+}
+
+func configDir(configFile string) string {
 	dir := filepath.Dir(configFile)
 	if dir == "" {
-		dir = "."
+		return "."
 	}
-	return filepath.Join(dir, backupBaseName(c.Mission.Name)+"-data.sqlite")
+	return dir
 }
 
 func backupBaseName(missionName string) string {

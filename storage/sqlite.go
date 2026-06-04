@@ -105,7 +105,7 @@ func (s *SQLiteStore) Close() error {
 		_ = s.insertRaw.Close()
 	}
 	if s.db != nil {
-		return s.db.Close()
+		return closeSQLiteDB(s.db)
 	}
 	return nil
 }

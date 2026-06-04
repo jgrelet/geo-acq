@@ -42,7 +42,7 @@ endif
 
 .DEFAULT_GOAL := help
 
-.PHONY: help fmt test build build-all build-sim build-sim-sounder build-export install-wails check-gui-prereqs build-gui-wails run-gui-wails run cross-build clean copy
+.PHONY: help fmt test build build-all build-sim build-sim-sounder build-export install-wails check-gui-prereqs build-gui run-gui run cross-build clean copy
 
 help:
 	@printf "%s\n" \
@@ -54,8 +54,8 @@ help:
 		"  make build-export  Build the export tool in $(BIN_DIR)/" \
 		"  make install-wails Install the Wails CLI locally if missing" \
 		"  make check-gui-prereqs Check that Wails GUI build tools are installed" \
-		"  make build-gui-wails Build the Wails GUI prototype" \
-		"  make run-gui-wails Start the Wails GUI prototype in dev mode" \
+		"  make build-gui Build the Wails GUI prototype" \
+		"  make run-gui Start the Wails GUI prototype in dev mode" \
 		"  make test          Run go test ./..." \
 		"  make fmt           Run gofmt on the repository" \
 		"  make cross-build   Build release binaries in $(DIST_DIR)/" \
@@ -73,7 +73,7 @@ build:
 	mkdir -p $(BIN_DIR)
 	$(GOENV) $(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(APP_BIN) $(MAIN_PKG)
 
-build-all: build build-sim build-sim-sounder build-export
+build-all: build build-sim build-sim-sounder build-export build-gui
 
 build-sim:
 	mkdir -p $(BIN_DIR)
@@ -124,10 +124,10 @@ check-gui-prereqs: install-wails
 		}; \
 	fi
 
-build-gui-wails: check-gui-prereqs
+build-gui: check-gui-prereqs
 	$(WAILS) build -clean $(WAILS_BUILD_ARGS)
 
-run-gui-wails: check-gui-prereqs
+run-gui: check-gui-prereqs
 	$(WAILS) dev $(WAILS_BUILD_ARGS)
 
 run: build

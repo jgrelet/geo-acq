@@ -87,8 +87,8 @@ tasks:
           "  task build-export   Build the export tool in {{.BIN_DIR}}/" \
           "  task install-wails  Install the Wails CLI locally if missing" \
           "  task check-gui-prereqs Check that Wails GUI build tools are installed" \
-          "  task build-gui-wails Build the Wails GUI prototype" \
-          "  task run-gui-wails  Start the Wails GUI prototype in dev mode" \
+          "  task build-gui      Build the Wails GUI prototype" \
+          "  task run-gui        Start the Wails GUI prototype in dev mode" \
           "  task test           Run go test ./..." \
           "  task fmt            Run gofmt on the repository" \
           "  task cross-build    Build release binaries in {{.DIST_DIR}}/" \
@@ -114,7 +114,7 @@ tasks:
 
   build-all:
     desc: Build all project binaries
-    deps: [build, build-sim, build-sim-sounder, build-export]
+    deps: [build, build-sim, build-sim-sounder, build-export, build-gui]
 
   build-sim:
     desc: Build the GPS simulator
@@ -179,13 +179,13 @@ tasks:
           fi
         fi
 
-  build-gui-wails:
+  build-gui:
     desc: Build the Wails GUI prototype
     deps: [check-gui-prereqs]
     cmds:
       - '"{{.WAILS_BIN}}" build -clean {{.WAILS_BUILD_ARGS}}'
 
-  run-gui-wails:
+  run-gui:
     desc: Run the Wails GUI prototype in dev mode
     deps: [check-gui-prereqs]
     cmds:

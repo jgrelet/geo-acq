@@ -128,7 +128,7 @@ func (s *ProcessedSQLiteStore) Close() error {
 		}
 	}
 	if s.db != nil {
-		return s.db.Close()
+		return closeSQLiteDB(s.db)
 	}
 	return nil
 }

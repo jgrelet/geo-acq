@@ -125,7 +125,9 @@ func NewApp() *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-	_, _ = a.LoadConfig(config.DefaultFile())
+	if _, err := a.LoadConfig(startupConfigPath()); err != nil {
+		_, _ = a.LoadConfig(config.DefaultFile())
+	}
 }
 
 func (a *App) GetState() AppState {
@@ -192,6 +194,10 @@ func (a *App) LoadConfig(path string) (AppState, error) {
 	a.lastError = ""
 	a.terminalFrames = nil
 	a.mu.Unlock()
+
+	if err := saveLastConfigPath(path); err != nil {
+		a.setLastError(err.Error())
+	}
 
 	a.emitState()
 	return a.GetState(), nil

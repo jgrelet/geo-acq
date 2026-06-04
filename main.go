@@ -16,7 +16,7 @@ func main() {
 	app := NewApp()
 
 	err := wails.Run(&options.App{
-		Title:            "Geo-acq acquisition system",
+		Title:            appTitle(),
 		Width:            1440,
 		Height:           920,
 		MinWidth:         1120,
