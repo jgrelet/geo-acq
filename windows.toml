@@ -24,7 +24,7 @@ processed_path = "examples"
 
 	[devices.echosounder]
 	type           = "nmea"
-	mode           = "disabled"
+	mode           = "simulate"
 	device         = "serial"
 	sentence       = "DBT"
 
