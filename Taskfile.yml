@@ -110,6 +110,7 @@ tasks:
   test:
     desc: Run Go tests
     cmds:
+      - mkdir -p frontend/dist
       - go test ./...
 
   build:

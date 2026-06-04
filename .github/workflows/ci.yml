@@ -25,7 +25,9 @@ jobs:
           go-version-file: go.mod
 
       - name: Run tests
-        run: go test ./...
+        run: |
+          mkdir -p frontend/dist
+          go test ./...
 
   cli-build:
     name: CLI build

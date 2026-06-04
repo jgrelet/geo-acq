@@ -69,6 +69,7 @@ fmt:
 	$(GOENV) $(GO) fmt ./...
 
 test:
+	mkdir -p frontend/dist
 	$(GOENV) $(GO) test ./...
 
 build:
