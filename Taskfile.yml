@@ -111,6 +111,7 @@ tasks:
     desc: Run Go tests
     cmds:
       - mkdir -p frontend/dist
+      - touch frontend/dist/gitkeep
       - go test ./...
 
   build:

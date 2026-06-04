@@ -70,6 +70,7 @@ fmt:
 
 test:
 	mkdir -p frontend/dist
+	touch frontend/dist/gitkeep
 	$(GOENV) $(GO) test ./...
 
 build:

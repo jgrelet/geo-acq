@@ -17,7 +17,7 @@ The format is based on Keep a Changelog, and this project follows semantic versi
 
 ### Changed
 
-- Ensure Go test workflows create the empty Wails frontend `dist` directory before running tests.
+- Ensure Go test workflows create a Wails frontend `dist` placeholder before running tests.
 - Checkpoint and truncate SQLite WAL files when closing acquisition stores so stopped sessions are reflected in the main `.sqlite` files.
 - Persist device simulation toggles by updating the loaded TOML `mode` value instead of keeping hidden runtime overrides.
 - Inject the application version at build time so release tags appear in the GUI title.

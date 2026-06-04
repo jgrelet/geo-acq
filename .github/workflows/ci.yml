@@ -27,6 +27,7 @@ jobs:
       - name: Run tests
         run: |
           mkdir -p frontend/dist
+          touch frontend/dist/gitkeep
           go test ./...
 
   cli-build:
