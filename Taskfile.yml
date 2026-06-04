@@ -36,7 +36,7 @@ vars:
   GOMODCACHE: '{{default (printf "%s/.gomodcache" .ROOT_DIR) .GOMODCACHE}}'
   APP_VERSION:
     sh: |
-      version="$(git describe --tags --exact-match 2>/dev/null || git describe --tags --always --dirty 2>/dev/null || printf "dev")"
+      version="$(git describe --tags --abbrev=0 2>/dev/null || printf "dev")"
       printf "%s" "${version#v}"
   LDFLAGS: '{{default (printf "-X main.appVersion=%s" .APP_VERSION) .LDFLAGS}}'
   APP_BIN:

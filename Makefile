@@ -27,7 +27,7 @@ PLATFORMS ?= windows/amd64 linux/amd64 linux/arm64 darwin/amd64
 GOCACHE ?= $(CURDIR)/.gocache
 GOMODCACHE ?= $(CURDIR)/.gomodcache
 GOENV = GOCACHE=$(GOCACHE) GOMODCACHE=$(GOMODCACHE)
-APP_VERSION ?= $(shell version="$$(git describe --tags --exact-match 2>/dev/null || git describe --tags --always --dirty 2>/dev/null || printf "dev")"; printf "%s" "$${version#v}")
+APP_VERSION ?= $(shell version="$$(git describe --tags --abbrev=0 2>/dev/null || printf "dev")"; printf "%s" "$${version#v}")
 LDFLAGS ?= -X main.appVersion=$(APP_VERSION)
 
 ifeq ($(OS),Windows_NT)
