@@ -43,29 +43,45 @@ On Windows, Git Bash works well with the current `Makefile` and `Taskfile`.
 ### Task
 
 ```bash
-task help
-task test
-task build
-task build-sim
-task build-sim-sounder
-task build-export
-task install-wails
-task check-gui-prereqs
-task build-gui-wails
+task
+Tasks:
+  task build          Build geo-acq in bin/
+  task build-all      Build all binaries in bin/
+  task build-sim      Build the GPS simulator in bin/
+  task build-sim-sounder Build the echosounder simulator in bin/
+  task build-export   Build the export tool in bin/
+  task install-wails  Install the Wails CLI locally if missing
+  task check-gui-prereqs Check that Wails GUI build tools are installed
+  task build-gui      Build the Wails GUI prototype
+  task run-gui        Start the Wails GUI prototype in dev mode
+  task test           Run go test ./...
+  task fmt            Run gofmt on the repository
+  task cross-build    Build release binaries in dist/
+  task run            Build and run geo-acq
+  task copy DEST=/path/to/dir   Copy release artifacts and TOML files
+  task clean          Remove build outputs and local Go caches
 ```
 
 ### Make
 
 ```bash
-make help
-make test
-make build
-make build-sim
-make build-export
-make install-wails
-make check-gui-prereqs
-make build-gui-wails
-make cross-build
+make
+Targets:
+  make build         Build geo-acq in bin/
+  make build-all     Build all binaries in bin/
+  make build-sim     Build the GPS simulator in bin/
+  make build-sim-sounder Build the echosounder simulator in bin/
+  make build-export  Build the export tool in bin/
+  make install-wails Install the Wails CLI locally if missing
+  make check-gui-prereqs Check that Wails GUI build tools are installed
+  make build-gui Build the Wails GUI prototype
+  make run-gui Start the Wails GUI prototype in dev mode
+  make test          Run go test ./...
+  make fmt           Run gofmt on the repository
+  make cross-build   Build release binaries in dist/
+  make run           Build and run geo-acq
+  make copy DEST=/path/to/dir   Copy release artifacts and TOML files
+  make clean         Remove build outputs and local Go caches
 ```
 
 Build outputs are written to `bin/` and release artifacts to `dist/`.
