@@ -64,7 +64,7 @@ jobs:
           mkdir -p dist
           go build \
             -trimpath \
-            -ldflags="-s -w" \
+            -ldflags="-s -w -X main.appVersion=ci" \
             -o "dist/geo-acq-${GOOS}-${GOARCH}${ext}" \
             ./cmd/geo-acq
 
@@ -100,5 +100,4 @@ jobs:
         run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Build GUI
-        run: wails build -clean -trimpath -tags webkit2_41
-
+        run: wails build -clean -trimpath -ldflags "-X main.appVersion=ci" -tags webkit2_41

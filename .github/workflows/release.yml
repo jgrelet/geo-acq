@@ -42,6 +42,7 @@ jobs:
           CGO_ENABLED: "0"
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.event.release.tag_name }}
         run: |
           mkdir -p dist
           ext=""
@@ -50,7 +51,7 @@ jobs:
           fi
           go build \
             -trimpath \
-            -ldflags="-s -w" \
+            -ldflags="-s -w -X main.appVersion=${VERSION#v}" \
             -o "dist/geo-acq-${GOOS}-${GOARCH}${ext}" \
             ./cmd/geo-acq
 
@@ -117,8 +118,9 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           WAILS_TAGS: ${{ matrix.wails_tags }}
+          VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.event.release.tag_name }}
         run: |
-          wails build -clean -trimpath ${WAILS_TAGS}
+          wails build -clean -trimpath -ldflags "-X main.appVersion=${VERSION#v}" ${WAILS_TAGS}
           mkdir -p dist
           ext=""
           if [ "${GOOS}" = "windows" ]; then

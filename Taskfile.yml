@@ -34,7 +34,11 @@ vars:
       fi
   GOCACHE: '{{default (printf "%s/.gocache" .ROOT_DIR) .GOCACHE}}'
   GOMODCACHE: '{{default (printf "%s/.gomodcache" .ROOT_DIR) .GOMODCACHE}}'
-  LDFLAGS: '{{default "" .LDFLAGS}}'
+  APP_VERSION:
+    sh: |
+      version="$(git describe --tags --exact-match 2>/dev/null || git describe --tags --always --dirty 2>/dev/null || printf "dev")"
+      printf "%s" "${version#v}"
+  LDFLAGS: '{{default (printf "-X main.appVersion=%s" .APP_VERSION) .LDFLAGS}}'
   APP_BIN:
     sh: |
       if [ "{{OS}}" = "windows" ]; then
@@ -185,7 +189,7 @@ tasks:
     desc: Build the Wails GUI prototype
     deps: [check-gui-prereqs]
     cmds:
-      - '"{{.WAILS_BIN}}" build -clean {{.WAILS_BUILD_ARGS}}'
+      - '"{{.WAILS_BIN}}" build -clean -ldflags "{{.LDFLAGS}}" {{.WAILS_BUILD_ARGS}}'
 
   run-gui:
     desc: Run the Wails GUI prototype in dev mode

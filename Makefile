@@ -27,7 +27,8 @@ PLATFORMS ?= windows/amd64 linux/amd64 linux/arm64 darwin/amd64
 GOCACHE ?= $(CURDIR)/.gocache
 GOMODCACHE ?= $(CURDIR)/.gomodcache
 GOENV = GOCACHE=$(GOCACHE) GOMODCACHE=$(GOMODCACHE)
-LDFLAGS ?=
+APP_VERSION ?= $(shell version="$$(git describe --tags --exact-match 2>/dev/null || git describe --tags --always --dirty 2>/dev/null || printf "dev")"; printf "%s" "$${version#v}")
+LDFLAGS ?= -X main.appVersion=$(APP_VERSION)
 
 ifeq ($(OS),Windows_NT)
 APP_BIN := $(APP_NAME).exe
@@ -126,7 +127,7 @@ check-gui-prereqs: install-wails
 	fi
 
 build-gui: check-gui-prereqs
-	$(WAILS) build -clean $(WAILS_BUILD_ARGS)
+	$(WAILS) build -clean -ldflags "$(LDFLAGS)" $(WAILS_BUILD_ARGS)
 
 run-gui: check-gui-prereqs
 	$(WAILS) dev $(WAILS_BUILD_ARGS)

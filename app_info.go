@@ -1,9 +1,8 @@
 package main
 
-const (
-	appName    = "Geo-acq acquisition system"
-	appVersion = "0.1.0"
-)
+const appName = "Geo-acq acquisition system"
+
+var appVersion = "dev"
 
 func appTitle() string {
 	return appName + " v" + appVersion
