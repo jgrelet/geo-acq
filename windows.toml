@@ -18,7 +18,7 @@ processed_path = "examples"
 
 	[devices.gps]
 	type           = "nmea"
-	mode           = "ready"
+	mode           = "simulate"
 	device         = "serial"
 	sentence       = "GGA,RMC"
 
