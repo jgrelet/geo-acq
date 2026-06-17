@@ -27,10 +27,10 @@ document.querySelector("#app").innerHTML = `
       <div class="monitoring-bar">
         <p class="eyebrow">Monitoring</p>
         <div class="tabs-bar monitoring-tabs">
-          <button class="tab-btn active" data-tab="config">Configuration</button>
           <button class="tab-btn" data-tab="devices">Device panels</button>
-          <button class="tab-btn" data-tab="terminal">Terminal raw frames</button>
-          <button class="tab-btn" data-tab="inputs">Available inputs</button>
+          <button class="tab-btn" data-tab="terminal">Terminal</button>
+          <button class="tab-btn active" data-tab="config">Configuration</button>
+          <button class="tab-btn" data-tab="inputs">Available input</button>
         </div>
       </div>
       <div class="hero-actions">
@@ -139,6 +139,8 @@ const elements = {
   errorBanner: document.getElementById("error-banner"),
   editorOverlay: document.getElementById("editor-overlay"),
   terminalSource: document.getElementById("terminal-source"),
+  startButton: document.getElementById("start-live"),
+  stopButton: document.getElementById("stop-session"),
   tabButtons: Array.from(document.querySelectorAll(".tab-btn")),
   tabPanels: {
     config: document.getElementById("tab-config"),
@@ -224,12 +226,8 @@ elements.devicesGrid.addEventListener("click", async (event) => {
     return;
   }
 
-  const { deviceToggle, deviceMode } = card.dataset;
-  if (deviceMode !== "disabled" && deviceMode !== "simulate") {
-    return;
-  }
-
   await safely(async () => {
+    const { deviceToggle } = card.dataset;
     const snapshot = await ToggleDeviceSimulation(deviceToggle);
     applyState(snapshot);
   });
@@ -312,6 +310,8 @@ function render() {
   elements.runBadge.textContent = snapshot.running ? "running" : "idle";
   elements.runBadge.className = `badge ${snapshot.running ? "badge-running" : "badge-idle"}`;
   elements.modeBadge.textContent = `mode: ${snapshot.mode || "idle"}`;
+  elements.startButton.classList.toggle("btn-start-active", snapshot.running);
+  elements.stopButton.classList.toggle("btn-stop-active", snapshot.running);
 
   elements.errorBanner.textContent = snapshot.lastError || "";
   elements.errorBanner.classList.toggle("hidden", !snapshot.lastError);
@@ -331,7 +331,7 @@ function render() {
       const decodedBlock = device.decodedJson
         ? renderDecodedFields(device.decodedJson)
         : `<p class="muted">No decoded values yet.</p>`;
-      const canToggleSimulation = !snapshot.running && (device.mode === "disabled" || device.mode === "simulate");
+      const canToggleSimulation = !snapshot.running;
       return `
         <article class="device-panel${canToggleSimulation ? " device-panel-toggle" : ""}" data-device-toggle="${escapeHTML(device.name)}" data-device-mode="${escapeHTML(device.mode || "")}">
           <div class="device-top">

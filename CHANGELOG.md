@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog, and this project follows semantic versioning.
 
+## [Unreleased]
+
+### Added
+
+- Allow GUI device panels to cycle each device mode between `ready`, `simulate`, and `disabled`.
+
+### Changed
+
+- Reorder Monitoring tabs to show Device panels, Terminal, Configuration, then Available input.
+- Highlight Start and Stop buttons while streaming is running.
+- Defer GUI device mode TOML updates until application shutdown or before changing configuration.
+
+### Fixed
+
+- Resolve frontend dependency security alerts by updating Vite and overriding esbuild to a fixed version.
+
 ## [0.2.1]
 
 ### Added

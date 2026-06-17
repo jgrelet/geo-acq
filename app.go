@@ -35,6 +35,7 @@ type App struct {
 	cfg            config.Config
 	deviceOrder    []string
 	deviceStates   map[string]*DevicePanelState
+	pendingDeviceModes map[string]string
 	terminalFrames []FrameEvent
 	serialPorts    []string
 	running        bool
@@ -117,8 +118,9 @@ type FrameEvent struct {
 
 func NewApp() *App {
 	return &App{
-		mode:         "idle",
-		deviceStates: make(map[string]*DevicePanelState),
+		mode:               "idle",
+		deviceStates:       make(map[string]*DevicePanelState),
+		pendingDeviceModes: make(map[string]string),
 	}
 }
 
@@ -126,6 +128,12 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	if _, err := a.LoadConfig(startupConfigPath()); err != nil {
 		_, _ = a.LoadConfig(config.DefaultFile())
+	}
+}
+
+func (a *App) shutdown(ctx context.Context) {
+	if err := a.persistPendingDeviceModes(); err != nil {
+		a.setLastError(err.Error())
 	}
 }
 
@@ -164,6 +172,9 @@ func (a *App) LoadConfig(path string) (AppState, error) {
 	if a.isRunning() {
 		return a.GetState(), fmt.Errorf("stop the current session before loading another config")
 	}
+	if err := a.persistPendingDeviceModes(); err != nil {
+		return a.GetState(), err
+	}
 
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -187,6 +198,7 @@ func (a *App) LoadConfig(path string) (AppState, error) {
 	a.cfg = cfg
 	a.deviceOrder = deviceOrder
 	a.deviceStates = deviceStates
+	a.pendingDeviceModes = make(map[string]string)
 	a.serialPorts = serialPorts
 	a.mode = "idle"
 	a.lastError = ""
@@ -218,6 +230,9 @@ func (a *App) SaveConfig(raw string) (AppState, error) {
 	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
 		return a.GetState(), fmt.Errorf("write config %s: %w", path, err)
 	}
+	a.mu.Lock()
+	a.pendingDeviceModes = make(map[string]string)
+	a.mu.Unlock()
 
 	return a.LoadConfig(path)
 }
@@ -225,6 +240,9 @@ func (a *App) SaveConfig(raw string) (AppState, error) {
 func (a *App) CreateDefaultConfig() (AppState, error) {
 	if a.isRunning() {
 		return a.GetState(), fmt.Errorf("stop the current session before creating a config")
+	}
+	if err := a.persistPendingDeviceModes(); err != nil {
+		return a.GetState(), err
 	}
 
 	path, err := config.DefaultUserFile()
@@ -259,43 +277,16 @@ func (a *App) ToggleDeviceSimulation(name string) (AppState, error) {
 	}
 
 	currentMode := a.effectiveDeviceModeLocked(name)
-	newMode := ""
-	switch currentMode {
-	case "disabled":
-		newMode = "simulate"
-	case "simulate":
-		newMode = "disabled"
-	default:
-		a.mu.Unlock()
-		return a.GetState(), nil
-	}
+	newMode := nextDeviceMode(currentMode)
 
-	configPath := a.configPath
-	if configPath == "" {
-		configPath = config.DefaultFile()
+	if a.pendingDeviceModes == nil {
+		a.pendingDeviceModes = make(map[string]string)
 	}
-	raw, err := updateDeviceModeInTOML(a.configRaw, name, newMode)
-	if err != nil {
-		a.mu.Unlock()
-		return a.GetState(), err
+	if newMode == configModeOrDisabled(a.cfg, name) {
+		delete(a.pendingDeviceModes, name)
+	} else {
+		a.pendingDeviceModes[name] = newMode
 	}
-	var cfg config.Config
-	if _, err := toml.Decode(raw, &cfg); err != nil {
-		a.mu.Unlock()
-		return a.GetState(), fmt.Errorf("updated TOML is invalid: %w", err)
-	}
-	if err := os.WriteFile(configPath, []byte(raw), 0o644); err != nil {
-		a.mu.Unlock()
-		return a.GetState(), fmt.Errorf("write config %s: %w", configPath, err)
-	}
-	cfg, err = config.Load(configPath)
-	if err != nil {
-		a.mu.Unlock()
-		return a.GetState(), err
-	}
-
-	a.configRaw = raw
-	a.cfg = cfg
 	state.Mode = newMode
 	state.Transport = displayTransportForMode(a.cfg.Devices[name], state.Mode)
 	state.Status = defaultStatus(state.Mode)
@@ -308,6 +299,70 @@ func (a *App) ToggleDeviceSimulation(name string) (AppState, error) {
 
 	a.mu.Unlock()
 	return a.GetState(), nil
+}
+
+func nextDeviceMode(mode string) string {
+	switch mode {
+	case "ready":
+		return "simulate"
+	case "simulate":
+		return "disabled"
+	default:
+		return "ready"
+	}
+}
+
+func (a *App) persistPendingDeviceModes() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if len(a.pendingDeviceModes) == 0 {
+		return nil
+	}
+
+	configPath := a.configPath
+	if configPath == "" {
+		configPath = config.DefaultFile()
+	}
+
+	raw := a.configRaw
+	var err error
+	for _, name := range a.deviceOrder {
+		mode, ok := a.pendingDeviceModes[name]
+		if !ok {
+			continue
+		}
+		raw, err = updateDeviceModeInTOML(raw, name, mode)
+		if err != nil {
+			return err
+		}
+	}
+
+	var cfg config.Config
+	if _, err := toml.Decode(raw, &cfg); err != nil {
+		return fmt.Errorf("updated TOML is invalid: %w", err)
+	}
+	if err := os.WriteFile(configPath, []byte(raw), 0o644); err != nil {
+		return fmt.Errorf("write config %s: %w", configPath, err)
+	}
+	cfg, err = config.Load(configPath)
+	if err != nil {
+		return err
+	}
+
+	a.configRaw = raw
+	a.cfg = cfg
+	a.pendingDeviceModes = make(map[string]string)
+	for _, name := range a.deviceOrder {
+		state, ok := a.deviceStates[name]
+		if !ok {
+			continue
+		}
+		state.Mode = configModeOrDisabled(a.cfg, name)
+		state.Transport = displayTransportForMode(a.cfg.Devices[name], state.Mode)
+		state.Status = defaultStatus(state.Mode)
+	}
+	return nil
 }
 
 func updateDeviceModeInTOML(raw string, name string, mode string) (string, error) {
@@ -1033,6 +1088,9 @@ func (a *App) sessionModeLocked() string {
 }
 
 func (a *App) effectiveDeviceModeLocked(name string) string {
+	if mode, ok := a.pendingDeviceModes[name]; ok {
+		return mode
+	}
 	return configModeOrDisabled(a.cfg, name)
 }
 

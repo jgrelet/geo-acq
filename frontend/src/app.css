@@ -167,6 +167,17 @@
   border: 1px solid rgba(255, 128, 128, 0.25);
 }
 
+.btn-start-active {
+  background: linear-gradient(135deg, #35d58d 0%, #1faa6f 100%);
+  color: #03170e;
+}
+
+.btn-stop-active {
+  background: linear-gradient(135deg, #ff6b5f 0%, #d9362e 100%);
+  color: #210504;
+  border-color: rgba(255, 155, 148, 0.6);
+}
+
 .error-banner {
   margin-top: 18px;
   padding: 14px 16px;
