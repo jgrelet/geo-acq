@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project follows semantic versi
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-06-17
+
 ### Added
 
 - Allow GUI device panels to cycle each device mode between `ready`, `simulate`, and `disabled`.
@@ -19,6 +21,7 @@ The format is based on Keep a Changelog, and this project follows semantic versi
 ### Fixed
 
 - Resolve frontend dependency security alerts by updating Vite and overriding esbuild to a fixed version.
+- Fix GitHub release creation when the workflow is triggered by a pushed tag.
 
 ## [0.2.1]
 
