@@ -31,8 +31,8 @@ processed_path = "examples"
 [serials]
 
 	[serials.gps]
-	port 	       = "COM3"
-	baud           = 4800
+	port 	       = "COM4"
+	baud           = 9600
 	parity	       = "none"
 	databit        = 8
 	stopbit        = 1
