@@ -6,6 +6,10 @@ The format is based on Keep a Changelog, and this project follows semantic versi
 
 ## [Unreleased]
 
+### Fixed
+
+- Update the frontend source-map-js dependency to 1.2.2 to fix CVE-2026-93749 (denial of service through malformed indexed source maps).
+
 ## [0.2.2] - 2026-06-17
 
 ### Added
