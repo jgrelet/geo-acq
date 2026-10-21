@@ -38,6 +38,8 @@ The project currently supports:
 
 On Windows, Git Bash works well with the current `Makefile` and `Taskfile`.
 
+The frontend lockfile includes source-map-js 1.2.2 or newer to address CVE-2026-93749. Use `npm ci` in `frontend/` to install the locked dependencies.
+
 ## Build and test
 
 ### Task
