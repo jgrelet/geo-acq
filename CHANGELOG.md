@@ -6,6 +6,12 @@ The format is based on Keep a Changelog, and this project follows semantic versi
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-10-25
+
+### Changed
+
+- Upgrade the Wails application dependency and CLI pins to 2.17.0 in local builds and GitHub Actions to address GUI binding generation failures with Go 1.27.
+
 ### Fixed
 
 - Update the frontend source-map-js dependency to 1.2.2 to fix CVE-2026-93749 (denial of service through malformed indexed source maps).

@@ -30,7 +30,7 @@ The project currently supports:
 
 ## Requirements
 
-- Go 1.19 or newer
+- Go 1.25.0 or newer
 - GNU Make if you want to use the `Makefile`
 - [Task](https://taskfile.dev/) if you want to use `Taskfile.yml`
 - Node.js and `npm` for the Wails GUI frontend build
@@ -112,8 +112,15 @@ targets, and validates a Linux Wails GUI build.
 
 ## Wails GUI prototype
 
-A first desktop GUI prototype is available with Wails at the repository root.
+A first desktop GUI prototype is available with Wails 2.17.0 at the repository root.
 It is intended for evaluation, not as a final production UI yet.
+
+The application dependency, CLI installation targets, and CI workflows use Wails 2.17.0.
+To upgrade an existing Wails CLI installation, run:
+
+```bash
+go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.0
+```
 
 What it currently provides:
 

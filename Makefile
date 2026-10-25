@@ -11,7 +11,7 @@ EXPORT_PKG := ./cmd/export
 BIN_DIR := bin
 DIST_DIR := dist
 GO ?= go
-WAILS_VERSION ?= v2.12.0
+WAILS_VERSION ?= v2.17.0
 WAILS_PKG ?= github.com/wailsapp/wails/v2/cmd/wails
 ifeq ($(OS),Windows_NT)
 GOPATH_DIR := $(shell go env GOPATH)
