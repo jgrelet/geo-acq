@@ -18,13 +18,13 @@ processed_path = "examples"
 
 	[devices.gps]
 	type           = "nmea"
-	mode           = "ready"
+	mode           = "simulate"
 	device         = "serial"
 	sentence       = "GGA,RMC"
 
 	[devices.echosounder]
 	type           = "nmea"
-	mode           = "simulate"
+	mode           = "ready"
 	device         = "serial"
 	sentence       = "DBT"
 
