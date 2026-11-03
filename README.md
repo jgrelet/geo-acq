@@ -40,6 +40,8 @@ On Windows, Git Bash works well with the current `Makefile` and `Taskfile`.
 
 The frontend lockfile includes source-map-js 1.2.2 or newer to address CVE-2026-93749. Use `npm ci` in `frontend/` to install the locked dependencies.
 
+The lockfile also includes nanoid 3.3.18 or newer in the 3.x series to address CVE-2026-67213 in the PostCSS dependency tree.
+
 Vite is constrained to `~6.4.5` to include security fixes. To update it, run `npm install --save-dev 'vite@~6.4.5'` in `frontend/` and commit both `package.json` and `package-lock.json`; editing the lockfile declaration alone does not update the installed package. Restart `task run-gui` after updating dependencies.
 
 ## Build and test

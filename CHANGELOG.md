@@ -8,6 +8,7 @@ The format is based on Keep a Changelog, and this project follows semantic versi
 
 ### Fixed
 
+- Update the transitive nanoid dependency used by PostCSS to a patched 3.x version to address CVE-2026-67213 (infinite loop in custom generators with a zero size).
 - Update Vite to 6.4.5 and align the frontend manifest and lockfile to include development-server security fixes, including CVE-2026-118662.
 
 ## [0.2.3] - 2026-10-25
