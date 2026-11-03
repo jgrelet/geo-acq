@@ -6,6 +6,10 @@ The format is based on Keep a Changelog, and this project follows semantic versi
 
 ## [Unreleased]
 
+### Fixed
+
+- Update Vite to 6.4.5 and align the frontend manifest and lockfile to include development-server security fixes, including CVE-2026-118662.
+
 ## [0.2.3] - 2026-10-25
 
 ### Changed
