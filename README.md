@@ -42,6 +42,8 @@ The frontend lockfile includes source-map-js 1.2.2 or newer to address CVE-2026-
 
 The lockfile also includes nanoid 3.3.18 or newer in the 3.x series to address CVE-2026-67213 in the PostCSS dependency tree.
 
+The Go module pins the indirect Echo dependency used by Wails to 4.16.3 to address CVE-2026-118651 and CVE-2026-118653 (spoofed client IP headers). Use the committed `go.mod` and `go.sum` when building.
+
 Vite is constrained to `~6.4.5` to include security fixes. To update it, run `npm install --save-dev 'vite@~6.4.5'` in `frontend/` and commit both `package.json` and `package-lock.json`; editing the lockfile declaration alone does not update the installed package. Restart `task run-gui` after updating dependencies.
 
 ## Build and test
